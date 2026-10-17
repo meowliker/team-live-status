@@ -43,5 +43,5 @@ npm run build && npm start
 
 ## Notes
 - It runs as an always-on server: it keeps polling in the background and saves picks to `.data/`. Host it somewhere that stays on (Railway, Render paid, a VPS, or an office PC), not Vercel's free serverless.
-- It makes one ClickUp call and one Jibble call per minute, well inside both APIs' limits.
+- Each minute it makes one Jibble call, one ClickUp call for today's time entries and one per linked person for their running timer (about 22 for 21 people), inside ClickUp's 100-a-minute limit.
 - Missed-break time is an estimate, because Jibble takes a screenshot about every 10 minutes.
