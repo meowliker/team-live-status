@@ -25,6 +25,9 @@ const writeJson = (n: string, v: unknown) => {
 };
 
 // ───────────────────────── roster matching ─────────────────────────
+/** Tracked from Jibble only: set in team.config.ts, or "Not on ClickUp" on the Settings page */
+const jibbleOnly = (m: Member, mapping: Mapping) => m.clickup === false || mapping[m.name]?.clickup === 'none';
+
 function matchRoster(people: JibblePerson[], mapping: Mapping) {
   const used = new Set<string>();
   const matched: { member: Member; person: JibblePerson }[] = [];
@@ -55,8 +58,8 @@ function matchRoster(people: JibblePerson[], mapping: Mapping) {
 }
 
 function matchClickup(member: Member, person: JibblePerson, members: ClickupMember[], mapping: Mapping) {
+  if (jibbleOnly(member, mapping)) return null;
   const manual = mapping[member.name]?.clickup;
-  if (manual === 'none') return null;
   if (manual !== undefined) {
     const m = members.find((c) => c.id === manual);
     if (m) return m;
@@ -241,7 +244,7 @@ class Engine {
       }
       const link = new Map(matched.map(({ member, person }) => [person.id, members.length ? matchClickup(member, person, members, this.mapping) : null]));
       this.links = new Map(matched.map(({ member, person }) => [member.name, { person, cu: link.get(person.id) || null }]));
-      const unlinked = matched.filter(({ member, person }) => clickupOn() && members.length && !link.get(person.id) && this.mapping[member.name]?.clickup !== 'none').map(({ member }) => member.name);
+      const unlinked = matched.filter(({ member, person }) => clickupOn() && members.length && !link.get(person.id) && !jibbleOnly(member, this.mapping)).map(({ member }) => member.name);
       if (unlinked.length) notices.push(`Not linked to ClickUp: ${unlinked.join(', ')}. Link them on the Settings page, or mark them "Not on ClickUp".`);
 
       const [entries, newShots] = await Promise.all([
@@ -318,6 +321,7 @@ class Engine {
           mode, pick, inPool,
           poolSince: this.poolSince.get(p.id) || null,
           clickupLinked: !!cu,
+          jibbleOnly: jibbleOnly(member, this.mapping),
           timer,
           trackedTodayMin: t ? t.trackedTodayMin : null,
           timerWhileOff: !!timer && state !== 'working',
@@ -397,7 +401,7 @@ class Engine {
           name: m.name,
           department: m.department,
           jibble: { id: l?.person.id || null, name: l?.person.name || null, manual: !!map.jibble },
-          clickup: { id: cu?.id ?? null, name: cu ? cu.username || cu.email : null, manual: map.clickup !== undefined, none: map.clickup === 'none' },
+          clickup: { id: cu?.id ?? null, name: cu ? cu.username || cu.email : null, manual: map.clickup !== undefined, none: jibbleOnly(m, this.mapping), locked: m.clickup === false },
         };
       }),
       jibblePeople: [...this.jibblePeople].sort((a, b) => a.name.localeCompare(b.name)),
@@ -407,7 +411,9 @@ class Engine {
 
   /** value: Jibble person id / ClickUp user id / 'none' (not on ClickUp) / null (back to automatic) */
   setLink(name: string, system: 'jibble' | 'clickup', value: string | number | null) {
-    if (!TEAM.some((m) => m.name === name)) return 'Unknown team member';
+    const member = TEAM.find((m) => m.name === name);
+    if (!member) return 'Unknown team member';
+    if (system === 'clickup' && member.clickup === false) return `${name} is set to Jibble only in team.config.ts`;
     const entry = { ...this.mapping[name] };
     if (value === null) delete entry[system];
     else if (system === 'jibble') {

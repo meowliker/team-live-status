@@ -12,6 +12,7 @@ One link that shows your team live:
 
 ## Team list
 Edit `team.config.ts`. Names are matched to Jibble; a first name is enough if it is unique.
+Add `clickup: false` to someone who doesn't use ClickUp: they are tracked from Jibble only and show under "Working now" while clocked in.
 
 ## Linking people (Settings page)
 Open **⚙ Settings** on the board (`/settings`). It lists everyone on the team with the Jibble person and ClickUp member they are linked to.
