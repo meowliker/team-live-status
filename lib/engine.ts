@@ -6,7 +6,7 @@ import * as jibble from './jibble';
 import * as clickup from './clickup';
 import * as mock from './mock';
 import { startOfToday, todayStr } from './time';
-import type { BoardEvent, BoardState, ClickupMember, DayReport, JibbleEntry, JibblePerson, Overlay, PersonRow, Segment, Shot, TimerInfo } from './types';
+import type { BoardEvent, BoardState, ClickupMember, DayReport, JibbleEntry, JibblePerson, Mapping, Overlay, PersonRow, Segment, SettingsState, Shot, TimerInfo } from './types';
 
 const norm = (n: string | null | undefined) => (n || '').toLowerCase().replace(/[^a-z0-9@. ]/g, ' ').replace(/\s+/g, ' ').trim();
 const ms = (a: string, b: string) => new Date(b).getTime() - new Date(a).getTime();
@@ -25,14 +25,20 @@ const writeJson = (n: string, v: unknown) => {
 };
 
 // ───────────────────────── roster matching ─────────────────────────
-function matchRoster(people: JibblePerson[]) {
+function matchRoster(people: JibblePerson[], mapping: Mapping) {
   const used = new Set<string>();
   const matched: { member: Member; person: JibblePerson }[] = [];
   const missing: string[] = [];
   const keys = (m: Member) => [m.name, ...(m.aliases || [])].map(norm);
+  // pass 0: links picked on the Settings page win over automatic matching
+  const auto: Member[] = [];
+  for (const m of TEAM) {
+    const p = mapping[m.name]?.jibble ? people.find((x) => x.id === mapping[m.name].jibble && !used.has(x.id)) : null;
+    if (p) { used.add(p.id); matched.push({ member: m, person: p }); } else auto.push(m);
+  }
   // pass 1: exact name / alias / email
   const pending: Member[] = [];
-  for (const m of TEAM) {
+  for (const m of auto) {
     const k = keys(m);
     const p = people.find((x) => !used.has(x.id) && (k.includes(norm(x.name)) || (x.email && k.includes(norm(x.email)))));
     if (p) { used.add(p.id); matched.push({ member: m, person: p }); } else pending.push(m);
@@ -43,10 +49,18 @@ function matchRoster(people: JibblePerson[]) {
     const hits = people.filter((x) => !used.has(x.id) && k.some((key) => norm(x.name).startsWith(key + ' ')));
     if (hits.length === 1) { used.add(hits[0].id); matched.push({ member: m, person: hits[0] }); } else missing.push(m.name);
   }
+  // keep roster order, so the board doesn't reshuffle when someone is linked manually
+  matched.sort((a, b) => TEAM.indexOf(a.member) - TEAM.indexOf(b.member));
   return { matched, missing };
 }
 
-function matchClickup(member: Member, person: JibblePerson, members: ClickupMember[]) {
+function matchClickup(member: Member, person: JibblePerson, members: ClickupMember[], mapping: Mapping) {
+  const manual = mapping[member.name]?.clickup;
+  if (manual === 'none') return null;
+  if (manual !== undefined) {
+    const m = members.find((c) => c.id === manual);
+    if (m) return m;
+  }
   const keys = [member.name, ...(member.aliases || []), person.name].map(norm);
   return (
     (person.email && members.find((c) => c.email === person.email)) ||
@@ -76,6 +90,10 @@ function frozenRuns(list: Shot[], segEnd: string): Overlay[] {
 
 class Engine {
   pool: Pool = readJson<Pool>('pool.json', { modes: {}, picks: {} });
+  mapping: Mapping = readJson<Mapping>('mapping.json', {});
+  jibblePeople: JibblePerson[] = [];
+  clickupMembers: ClickupMember[] = [];
+  links = new Map<string, { person: JibblePerson; cu: ClickupMember | null }>();
   shots = new Map<string, Shot[]>();
   seenShots = new Set<string>();
   lastShotFetch: number | null = null;
@@ -207,8 +225,9 @@ class Engine {
     try {
       if (!jibbleOn()) throw new Error('Jibble keys are missing. Add JIBBLE_CLIENT_ID and JIBBLE_CLIENT_SECRET (or run in demo mode).');
       const all = CONFIG.mock ? await mock.getPeople() : await jibble.getPeople();
-      const { matched, missing } = matchRoster(all);
-      if (missing.length) notices.push(`Not found in Jibble: ${missing.join(', ')}. Fix the name in team.config.ts (add an alias).`);
+      this.jibblePeople = all;
+      const { matched, missing } = matchRoster(all, this.mapping);
+      if (missing.length) notices.push(`Not found in Jibble: ${missing.join(', ')}. Link them on the Settings page.`);
       const ids = new Set(matched.map((m) => m.person.id));
 
       // ClickUp: members + running timers (one call per poll)
@@ -218,10 +237,12 @@ class Engine {
         try {
           members = CONFIG.mock ? await mock.getMembers() : await clickup.getMembers();
         } catch (e) { errors.push((e as Error).message); }
+        if (members.length) this.clickupMembers = members;
       }
-      const link = new Map(matched.map(({ member, person }) => [person.id, members.length ? matchClickup(member, person, members) : null]));
-      const unlinked = matched.filter(({ person }) => clickupOn() && members.length && !link.get(person.id)).map(({ member }) => member.name);
-      if (unlinked.length) notices.push(`Not linked to ClickUp: ${unlinked.join(', ')}. Use the same email in Jibble and ClickUp, or add their ClickUp name as an alias.`);
+      const link = new Map(matched.map(({ member, person }) => [person.id, members.length ? matchClickup(member, person, members, this.mapping) : null]));
+      this.links = new Map(matched.map(({ member, person }) => [member.name, { person, cu: link.get(person.id) || null }]));
+      const unlinked = matched.filter(({ member, person }) => clickupOn() && members.length && !link.get(person.id) && this.mapping[member.name]?.clickup !== 'none').map(({ member }) => member.name);
+      if (unlinked.length) notices.push(`Not linked to ClickUp: ${unlinked.join(', ')}. Link them on the Settings page, or mark them "Not on ClickUp".`);
 
       const [entries, newShots] = await Promise.all([
         CONFIG.mock ? mock.getRecentEntries() : jibble.getRecentEntries(),
@@ -349,6 +370,60 @@ class Engine {
       people: this.people,
       events: this.events.slice(0, 60),
     };
+  }
+
+  /** Runs a fresh poll even if one is already in flight (that one may have used old settings) */
+  async pollFresh() {
+    await this.running?.catch(() => {});
+    return this.poll();
+  }
+
+  settings(): SettingsState {
+    const volume = process.env.RAILWAY_VOLUME_MOUNT_PATH;
+    const dir = path.resolve(CONFIG.dataDir);
+    return {
+      mock: CONFIG.mock,
+      clickup: clickupOn(),
+      updatedAt: this.updatedAt,
+      errors: this.errors,
+      // On Railway we can tell whether the data folder is on a volume; anywhere else we can't
+      storage: { dir, persistent: process.env.RAILWAY_ENVIRONMENT ? !!volume && (dir + '/').startsWith(path.resolve(volume) + '/') : null },
+      roster: TEAM.map((m) => {
+        const l = this.links.get(m.name);
+        const map = this.mapping[m.name] || {};
+        // ClickUp is only matched once the Jibble side is linked; still show a hand-picked ClickUp member
+        const cu = l?.cu || (typeof map.clickup === 'number' ? this.clickupMembers.find((c) => c.id === map.clickup) : null) || null;
+        return {
+          name: m.name,
+          department: m.department,
+          jibble: { id: l?.person.id || null, name: l?.person.name || null, manual: !!map.jibble },
+          clickup: { id: cu?.id ?? null, name: cu ? cu.username || cu.email : null, manual: map.clickup !== undefined, none: map.clickup === 'none' },
+        };
+      }),
+      jibblePeople: [...this.jibblePeople].sort((a, b) => a.name.localeCompare(b.name)),
+      clickupMembers: [...this.clickupMembers].sort((a, b) => (a.username || a.email || '').localeCompare(b.username || b.email || '')),
+    };
+  }
+
+  /** value: Jibble person id / ClickUp user id / 'none' (not on ClickUp) / null (back to automatic) */
+  setLink(name: string, system: 'jibble' | 'clickup', value: string | number | null) {
+    if (!TEAM.some((m) => m.name === name)) return 'Unknown team member';
+    const entry = { ...this.mapping[name] };
+    if (value === null) delete entry[system];
+    else if (system === 'jibble') {
+      if (!this.jibblePeople.some((p) => p.id === value)) return 'That Jibble person was not found';
+      const taken = Object.entries(this.mapping).find(([n, v]) => n !== name && v.jibble === value);
+      if (taken) return `That Jibble person is already linked to ${taken[0]}`;
+      entry.jibble = String(value);
+    } else if (value === 'none') entry.clickup = 'none';
+    else {
+      if (!this.clickupMembers.some((c) => c.id === Number(value))) return 'That ClickUp member was not found';
+      entry.clickup = Number(value);
+    }
+    if (Object.keys(entry).length) this.mapping[name] = entry;
+    else delete this.mapping[name];
+    writeJson('mapping.json', this.mapping);
+    return null;
   }
 
   find(id: string) { return this.people.find((p) => p.id === id); }
