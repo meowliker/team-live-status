@@ -1,6 +1,6 @@
 import { CONFIG } from './config';
 import { startOfToday } from './time';
-import type { ClickupMember, TimerInfo } from './types';
+import type { ClickupMember, Timer, TimerInfo } from './types';
 
 const API = 'https://api.clickup.com/api/v2';
 
@@ -27,9 +27,26 @@ export async function getMembers(): Promise<ClickupMember[]> {
   return list;
 }
 
+const toTimer = (e: any): Timer => {
+  const task = e.task && typeof e.task === 'object' ? e.task : null;
+  return {
+    task: task?.name || e.description || 'Timer running (no task)',
+    url: task?.id ? `https://app.clickup.com/t/${task.id}` : e.task_url || null,
+    status: task?.status?.status || null,
+    startedAt: new Date(Number(e.start)).toISOString(),
+  };
+};
+
+/** The timer running right now for one person, or null. Other people's need an Owner/Admin token. */
+async function getCurrent(userId: number) {
+  const { data } = await get(`/team/${CONFIG.clickupTeamId}/time_entries/current?assignee=${userId}`);
+  return data?.id ? data : null;
+}
+
 /**
- * One call for the whole team: today's time entries. A negative duration means
- * that timer is running right now. Also sums each person's tracked time today.
+ * Today's time entries for the whole team in one call, to sum each person's tracked time.
+ * The date-range list doesn't reliably include timers that are still running, so each
+ * linked person's running timer is also read from the "current timer" endpoint.
  * Needs a token from a Workspace Owner/Admin to see other people's timers.
  */
 export async function getTimers(memberIds: number[]): Promise<Map<number, TimerInfo>> {
@@ -43,26 +60,44 @@ export async function getTimers(memberIds: number[]): Promise<Map<number, TimerI
     assignee: memberIds.join(','),
   });
   const { data } = await get(`/team/${CONFIG.clickupTeamId}/time_entries?${params}`);
+  const info = (uid: number) => {
+    if (!out.has(uid)) out.set(uid, { running: null, trackedTodayMin: 0 });
+    return out.get(uid)!;
+  };
+  const counted = new Set<string>();
+  const add = (uid: number, start: number, end: number) => { info(uid).trackedTodayMin += Math.max(0, end - Math.max(start, sot)) / 60e3; };
+
   for (const e of data || []) {
     const uid = Number(e.user?.id);
     if (!uid) continue;
-    const info = out.get(uid) || { running: null, trackedTodayMin: 0 };
     const start = Number(e.start);
     const dur = Number(e.duration);
-    const running = dur < 0;
-    const end = running ? now : Number(e.end) || start + dur;
-    info.trackedTodayMin += Math.max(0, end - Math.max(start, sot)) / 60e3;
-    if (running) {
-      const task = e.task && typeof e.task === 'object' ? e.task : null;
-      info.running = {
-        task: task?.name || e.description || 'Timer running (no task)',
-        url: task?.id ? `https://app.clickup.com/t/${task.id}` : e.task_url || null,
-        status: task?.status?.status || null,
-        startedAt: new Date(start).toISOString(),
-      };
-    }
-    out.set(uid, info);
+    const running = dur < 0 || !Number(e.end); // running timers have a negative duration and no end
+    add(uid, start, running ? now : Number(e.end) || start + dur);
+    counted.add(String(e.id));
+    if (running) info(uid).running = toTimer(e);
   }
+
+  // Running timers, a few people at a time
+  const queue = [...memberIds];
+  const failures: string[] = [];
+  await Promise.all(Array.from({ length: 5 }, async () => {
+    while (queue.length) {
+      const uid = queue.shift()!;
+      try {
+        const e = await getCurrent(uid);
+        if (!e) {
+          if (out.has(uid)) out.get(uid)!.running = null; // this endpoint wins over the list
+          continue;
+        }
+        if (!counted.has(String(e.id))) add(uid, Number(e.start), now);
+        info(uid).running = toTimer(e);
+      } catch (err) { failures.push((err as Error).message); }
+    }
+  }));
+  if (failures.length) console.warn(`ClickUp running timers: ${failures.length} failed, e.g. ${failures[0]}`);
+  if (failures.length === memberIds.length) throw new Error(failures[0]);
+
   for (const v of out.values()) v.trackedTodayMin = Math.round(v.trackedTodayMin);
   return out;
 }

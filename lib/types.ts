@@ -68,3 +68,22 @@ export type BoardState = {
   people: PersonRow[];
   events: BoardEvent[];
 };
+
+/** Manual links set on the Settings page, keyed by roster name. Missing = match automatically. */
+export type Mapping = Record<string, { jibble?: string; clickup?: number | 'none' }>;
+
+export type SettingsState = {
+  mock: boolean;
+  clickup: boolean;
+  updatedAt: string | null;
+  errors: string[];
+  storage: { dir: string; persistent: boolean | null };
+  roster: {
+    name: string;
+    department: string;
+    jibble: { id: string | null; name: string | null; manual: boolean };
+    clickup: { id: number | null; name: string | null; manual: boolean; none: boolean };
+  }[];
+  jibblePeople: JibblePerson[];
+  clickupMembers: ClickupMember[];
+};

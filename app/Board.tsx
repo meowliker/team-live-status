@@ -186,6 +186,7 @@ export default function Board() {
           {alerts !== 'unsupported' && (
             <button className="btn" onClick={async () => setAlerts(await Notification.requestPermission())}>{alerts === 'granted' ? '🔔 Alerts on' : alerts === 'denied' ? '🔕 Blocked' : '🔔 Alerts'}</button>
           )}
+          <a className="btn" href="/settings">⚙ Settings</a>
           <button className="btn" disabled={busy} onClick={refresh}>{busy ? '⟳ Refreshing…' : '⟳ Refresh'}</button>
           <span className="clock">{data.updatedAt ? `Updated ${ago(data.updatedAt)}` : 'Loading…'}</span>
         </div>

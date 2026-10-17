@@ -5,7 +5,8 @@ export const CONFIG = {
   mock: on(process.env.MOCK, false),
   timezone: process.env.TIMEZONE || 'Asia/Kolkata',
   pollMs: num(process.env.POLL_SECONDS, 60) * 1000,
-  dataDir: process.env.DATA_DIR || '.data',
+  // On Railway with a volume attached, save to the volume by default so data survives redeploys
+  dataDir: process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || '.data',
 
   jibbleId: process.env.JIBBLE_CLIENT_ID || '',
   jibbleSecret: process.env.JIBBLE_CLIENT_SECRET || '',
