@@ -2,7 +2,7 @@
 //  TEAM ROSTER — the only people shown on the board.
 //  Edit names / departments here. Names are matched to Jibble
 //  (case doesn't matter). If someone's Jibble name is different,
-//  add it in `aliases` (e.g. their full name in Jibble).
+//  add it in `aliases` (e.g. their full name or email in Jibble).
 //  `clickup: false` = track Jibble only (no ClickUp timer checks).
 // ─────────────────────────────────────────────────────────────
 
@@ -34,7 +34,13 @@ export const TEAM: Member[] = [
 
   { name: 'Mahesh', department: 'Finance', clickup: false },
   { name: 'Santushti', department: 'HR', clickup: false },
+
+  // Jibble only, matched by their Jibble email
+  { name: 'Kazeem', department: 'Other', clickup: false, aliases: ['sodunkek@gmail.com'] },
+  { name: 'Ryan Munene', department: 'Other', clickup: false, aliases: ['ryanmunene.n@gmail.com'] },
+  { name: 'Salman', department: 'Other', clickup: false, aliases: ['salmanjaved5558@gmail.com'] },
+  { name: 'Shakthi', department: 'Other', clickup: false, aliases: ['shakthi.official1@gmail.com'] },
 ];
 
 // Order of department lanes on the board
-export const DEPARTMENTS = ['Editor', 'Creative Strategist', 'Graphic Designer', 'Website Designer', 'Media Buyer', 'Finance', 'HR'];
+export const DEPARTMENTS = ['Editor', 'Creative Strategist', 'Graphic Designer', 'Website Designer', 'Media Buyer', 'Finance', 'HR', 'Other'];
