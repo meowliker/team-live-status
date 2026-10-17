@@ -43,6 +43,7 @@ export type PersonRow = {
   inPool: boolean;
   poolSince: string | null;
   clickupLinked: boolean;
+  jibbleOnly: boolean;
   timer: Timer | null;
   trackedTodayMin: number | null;
   timerWhileOff: boolean;
@@ -82,7 +83,7 @@ export type SettingsState = {
     name: string;
     department: string;
     jibble: { id: string | null; name: string | null; manual: boolean };
-    clickup: { id: number | null; name: string | null; manual: boolean; none: boolean };
+    clickup: { id: number | null; name: string | null; manual: boolean; none: boolean; locked: boolean };
   }[];
   jibblePeople: JibblePerson[];
   clickupMembers: ClickupMember[];

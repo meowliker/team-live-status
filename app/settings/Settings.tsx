@@ -117,7 +117,8 @@ export default function Settings() {
                   <span className="lbl">ClickUp</span>
                   <select
                     value={r.clickup.none ? 'none' : r.clickup.manual && r.clickup.id !== null ? String(r.clickup.id) : ''}
-                    disabled={saving === `${r.name}:clickup` || !data.clickupMembers.length}
+                    disabled={saving === `${r.name}:clickup` || !data.clickupMembers.length || r.clickup.locked}
+                    title={r.clickup.locked ? 'Set to Jibble only in team.config.ts' : undefined}
                     onChange={(e) => save(r.name, 'clickup', e.target.value)}
                   >
                     <option value="">{r.clickup.manual ? 'Auto (match by email / name)' : `Auto: ${r.clickup.name || 'no match found'}`}</option>
@@ -133,7 +134,7 @@ export default function Settings() {
                   </select>
                 </label>
               )}
-              <div className="mapstatus">{status(r)}{(r.jibble.manual || r.clickup.manual) && <span className="manual">set by hand</span>}</div>
+              <div className="mapstatus">{status(r)}{r.clickup.locked ? <span className="manual">set in team.config.ts</span> : (r.jibble.manual || r.clickup.manual) && <span className="manual">set by hand</span>}</div>
             </div>
           )) : <div className="empty">Everyone is linked.</div>}
         </div>

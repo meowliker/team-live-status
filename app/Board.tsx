@@ -139,7 +139,7 @@ export default function Board() {
         {p.timer.url ? <a href={p.timer.url} target="_blank" rel="noopener noreferrer">{p.timer.task}</a> : <a>{p.timer.task}</a>}
         <span className="el">{dur(p.timer.startedAt)}</span>
       </div>
-    ) : data.clickup && p.state === 'working' ? (
+    ) : data.clickup && p.state === 'working' && !p.jibbleOnly ? (
       <div className="task none">{p.clickupLinked ? (p.mode === 'busy' ? 'Marked busy · no timer running' : 'No ClickUp timer running') : 'Not linked to ClickUp'}</div>
     ) : null;
 
