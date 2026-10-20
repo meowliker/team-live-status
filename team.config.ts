@@ -9,8 +9,6 @@
 export type Member = { name: string; department: string; aliases?: string[]; clickup?: false };
 
 export const TEAM: Member[] = [
-  { name: 'Chirayu', department: 'Media Buyer' },
-
   { name: 'Nitin', department: 'Creative Strategist' },
   { name: 'Aryan Dewangan', department: 'Creative Strategist' },
   { name: 'Apurwa', department: 'Creative Strategist' },
@@ -27,15 +25,9 @@ export const TEAM: Member[] = [
   { name: 'Samriddhi', department: 'Graphic Designer' },
   { name: 'Kirti Verma', department: 'Graphic Designer' },
 
-  { name: 'Vidit', department: 'Website Designer' },
-  { name: 'Anay', department: 'Website Designer' },
   { name: 'Pragati Shukla', department: 'Website Designer' },
 
-  { name: 'Mahesh', department: 'Finance', clickup: false },
-  { name: 'Santushti', department: 'HR', clickup: false },
-
   // Jibble only, matched by their Jibble email
-  { name: 'Kazeem', department: 'Other', clickup: false, aliases: ['sodunkek@gmail.com'] },
   { name: 'Ryan Munene', department: 'Other', clickup: false, aliases: ['ryanmunene.n@gmail.com'] },
   { name: 'Salman', department: 'Other', clickup: false, aliases: ['salmanjaved5558@gmail.com'] },
   { name: 'Shakthi', department: 'Other', clickup: false, aliases: ['shakthi.official1@gmail.com'] },
