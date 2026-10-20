@@ -11,9 +11,12 @@ export type Shot = { id: string; personId: string; time: string; blank: boolean;
 
 export type ClickupMember = { id: number; email: string | null; username: string | null };
 export type Timer = { task: string; url: string | null; status: string | null; startedAt: string };
-export type TimerInfo = { running: Timer | null; trackedTodayMin: number };
+export type TaskTime = { name: string; url: string | null; minutes: number; running: boolean };
+export type TimerInfo = { running: Timer | null; trackedTodayMin: number; tasks?: TaskTime[] };
 
-export type Segment = { kind: 'work' | 'break'; from: string; to: string };
+export type Segment = { kind: 'work' | 'break'; from: string; to: string; activity?: string | null; project?: string | null };
+/** Time on one Jibble activity + project today */
+export type ActivityTime = { activity: string | null; project: string | null; minutes: number; current: boolean };
 export type Overlay = { kind: 'away' | 'frozen' | 'nodata'; from: string; to: string; shots?: number; ongoing?: boolean };
 export type DayReport = {
   firstIn: string | null;
@@ -28,6 +31,7 @@ export type DayReport = {
   overBreak: number;
   segments: Segment[];
   overlays: Overlay[];
+  activities: ActivityTime[];
 };
 
 export type PersonRow = {
@@ -46,6 +50,7 @@ export type PersonRow = {
   jibbleOnly: boolean;
   timer: Timer | null;
   trackedTodayMin: number | null;
+  clickupTasks: TaskTime[] | null;
   timerWhileOff: boolean;
   away: { since: string; minutes: number } | null;
   frozen: { since: string; minutes: number; shots: number } | null;

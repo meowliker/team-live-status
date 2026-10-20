@@ -10,7 +10,6 @@ export type Member = { name: string; department: string; aliases?: string[]; cli
 
 export const TEAM: Member[] = [
   { name: 'Chirayu', department: 'Media Buyer' },
-  { name: 'Nischay', department: 'Media Buyer' },
 
   { name: 'Nitin', department: 'Creative Strategist' },
   { name: 'Aryan Dewangan', department: 'Creative Strategist' },

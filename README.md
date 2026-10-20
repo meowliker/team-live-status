@@ -8,6 +8,7 @@ One link that shows your team live:
 - **Needs attention**: blank or frozen screens (from Jibble screenshots), or a ClickUp timer left running during a break or after clock-out.
 - **Offline**: clocked out (with the time) or not in today.
 - **Today's report**: clock-in, clock-out, worked time vs 7h, ClickUp tracked time, breaks vs 1h 30m, and a colour timeline for each person.
+- **Click anyone's name** to see their day: clock-in, worked time, breaks, a timeline, time per Jibble activity/project (the activity picked at clock-in) and time per ClickUp task.
 - Live feed, browser alerts, department filters, light and dark mode. Works on phones.
 
 ## Team list
