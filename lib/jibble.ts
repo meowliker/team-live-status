@@ -49,19 +49,22 @@ export async function getPeople(): Promise<JibblePerson[]> {
   return people.map((p) => ({ id: p.id, name: p.fullName, email: p.email?.toLowerCase() || null }));
 }
 
-/** All time entries over the last 36h, oldest first. In = working, StartBreak = on break, Out = clocked out */
-export async function getRecentEntries(): Promise<JibbleEntry[]> {
-  const since = new Date(Date.now() - 36 * 3600e3).toISOString();
-  return getAll<JibbleEntry>(
+const entries = (filter: string) =>
+  getAll<JibbleEntry>(
     `${TRACKING}/TimeEntries` +
       q({
         $select: 'id,personId,type,time,belongsToDate',
         $expand: 'activity($select=name),project($select=name)',
-        $filter: `time ge ${since} and status eq 'Active'`,
+        $filter: `${filter} and status eq 'Active'`,
         $orderby: 'time asc',
       }),
   );
-}
+
+/** All time entries over the last 36h, oldest first. In = working, StartBreak = on break, Out = clocked out */
+export const getRecentEntries = () => entries(`time ge ${new Date(Date.now() - 36 * 3600e3).toISOString()}`);
+
+/** Time entries between two moments, oldest first (for the weekly report) */
+export const getEntriesBetween = (fromIso: string, toIso: string) => entries(`time ge ${fromIso} and time lt ${toIso}`);
 
 export async function getScreenshotsSince(sinceIso: string) {
   return getAll<{ id: string; personId: string; time: string; url: string }>(

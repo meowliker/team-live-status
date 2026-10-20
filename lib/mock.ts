@@ -1,6 +1,6 @@
 // Demo data so the board can be tried without any keys: `npm run mock`
 import { TEAM } from '../team.config';
-import { todayStr } from './time';
+import { addDays, startOfDay, todayStr } from './time';
 import type { ClickupMember, JibbleEntry, JibblePerson, Shot, TimerInfo } from './types';
 
 const min = (m: number) => new Date(Date.now() - m * 60e3).toISOString();
@@ -79,3 +79,62 @@ export async function getTimers(): Promise<Map<number, TimerInfo>> {
   });
   return map;
 }
+
+// ── past days for the weekly report ──
+const rnd = (...k: (string | number)[]) => {
+  let h = 2166136261;
+  for (const c of k.join('|')) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+  return ((h >>> 0) % 10000) / 10000;
+};
+const datesBetween = (fromIso: string, toIso: string) => {
+  const out: string[] = [];
+  for (let d = todayStr(new Date(fromIso)); d <= todayStr(new Date(toIso)); d = addDays(d, 1)) out.push(d);
+  return out;
+};
+const workDay = (i: number, date: string) => {
+  const dow = new Date(date + 'T12:00:00Z').getUTCDay();
+  return date < todayStr() && (dow >= 1 && dow <= 5 ? rnd(i, date, 'off') > 0.08 : dow === 6 && i % 5 === 0);
+};
+// [in, break start, back, out] in ms for one person's past day
+const dayPlan = (i: number, date: string) => {
+  const t0 = startOfDay(date).getTime() + (9 * 60 + rnd(i, date, 'in') * 90) * 60e3;
+  const t1 = t0 + (210 + rnd(i, date, 'a') * 60) * 60e3;
+  const t2 = t1 + (30 + rnd(i, date, 'b') * 50) * 60e3;
+  const t3 = t2 + (200 + rnd(i, date, 'c') * 90) * 60e3;
+  return [t0, t1, t2, t3];
+};
+
+export async function getEntriesBetween(fromIso: string, toIso: string): Promise<JibbleEntry[]> {
+  const out: JibbleEntry[] = [];
+  for (const date of datesBetween(fromIso, toIso)) {
+    if (date === todayStr()) { out.push(...(await getRecentEntries()).filter((e) => e.belongsToDate === date)); continue; }
+    people.forEach((p, i) => {
+      if (!workDay(i, date)) return;
+      const [t0, t1, t2, t3] = dayPlan(i, date);
+      const iso = (t: number) => new Date(t).toISOString();
+      out.push(
+        { personId: p.id, type: 'In', time: iso(t0), belongsToDate: date, ...act(i + Math.floor(rnd(i, date, 'x') * 3)) },
+        { personId: p.id, type: 'StartBreak', time: iso(t1), belongsToDate: date },
+        { personId: p.id, type: 'In', time: iso(t2), belongsToDate: date, ...act(i + 1) },
+        { personId: p.id, type: 'Out', time: iso(t3), belongsToDate: date },
+      );
+    });
+  }
+  return out.filter((e) => e.time >= fromIso && e.time < toIso).sort((a, b) => a.time.localeCompare(b.time));
+}
+
+export async function getClickupEntriesBetween(startMs: number, endMs: number): Promise<any[]> {
+  const out: any[] = [];
+  for (const date of datesBetween(new Date(startMs).toISOString(), new Date(endMs).toISOString())) {
+    people.forEach((_, i) => {
+      if (!workDay(i, date)) return;
+      const [t0, t1, t2, t3] = dayPlan(i, date);
+      [[t0 + 10 * 60e3, t1 - 5 * 60e3], [t2 + 5 * 60e3, t3 - (20 + rnd(i, date, 'gap') * 60) * 60e3]].forEach(([a, b], k) => {
+        const name = tasks[(i + k + Math.floor(rnd(i, date, 't') * 4)) % tasks.length];
+        out.push({ id: `${i}-${date}-${k}`, user: { id: 1000 + i }, start: String(a), end: String(b), duration: String(b - a), task: { id: `t${name.length}`, name } });
+      });
+    });
+  }
+  return out.filter((e) => Number(e.start) >= startMs && Number(e.start) < endMs);
+}
+

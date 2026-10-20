@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BoardEvent, BoardState, PersonRow } from '@/lib/types';
 import { DEPT_COLORS, ago, dur, fm, hm, initials, mins } from './format';
 import PersonPanel from './PersonPanel';
+import WeekReport from './WeekReport';
 
 
 type Filter = 'all' | 'working' | 'pool' | 'break' | 'attention' | 'out';
@@ -12,7 +13,7 @@ export default function Board() {
   const [data, setData] = useState<BoardState | null>(null);
   const [failed, setFailed] = useState(false);
   const [, setTick] = useState(0);
-  const [tab, setTab] = useState<'live' | 'day'>('live');
+  const [tab, setTab] = useState<'live' | 'day' | 'week'>('live');
   const [dept, setDept] = useState('All');
   const [filter, setFilter] = useState<Filter>('all');
   const [me, setMe] = useState('');
@@ -25,7 +26,7 @@ export default function Board() {
     try {
       setMe(localStorage.getItem('me') || '');
       setDept(localStorage.getItem('dept') || 'All');
-      setTab((localStorage.getItem('tab') as 'live' | 'day') || 'live');
+      setTab((localStorage.getItem('tab') as 'live' | 'day' | 'week') || 'live');
     } catch {}
     setAlerts(typeof Notification === 'undefined' ? 'unsupported' : Notification.permission);
   }, []);
@@ -178,6 +179,7 @@ export default function Board() {
           <div className="tabs">
             <button className={tab === 'live' ? 'on' : ''} onClick={() => { setTab('live'); remember('tab', 'live'); }}>Live board</button>
             <button className={tab === 'day' ? 'on' : ''} onClick={() => { setTab('day'); remember('tab', 'day'); }}>Today’s report</button>
+            <button className={tab === 'week' ? 'on' : ''} onClick={() => { setTab('week'); remember('tab', 'week'); }}>Weekly</button>
           </div>
           <div className="grow" />
           <label className="me">I am <input value={me} placeholder="your name" onChange={(e) => { setMe(e.target.value); remember('me', e.target.value.trim()); }} /></label>
@@ -218,7 +220,9 @@ export default function Board() {
 
         <div className="layout">
           <div>
-            {tab === 'day' ? (
+            {tab === 'week' ? (
+              <WeekReport dept={dept} deptColor={deptColor} />
+            ) : tab === 'day' ? (
               <DayReport people={P} data={data} deptColor={deptColor} onOpen={setOpenId} />
             ) : (
               <>
