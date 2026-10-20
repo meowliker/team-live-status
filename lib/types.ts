@@ -93,3 +93,40 @@ export type SettingsState = {
   jibblePeople: JibblePerson[];
   clickupMembers: ClickupMember[];
 };
+
+/** One person's day inside the weekly report. Times of day are minutes after midnight (team timezone). */
+export type WeekDay = { date: string; firstIn: number | null; lastOut: number | null; worked: number; breaks: number; clickup: number | null };
+
+export type PersonWeek = {
+  name: string;
+  department: string;
+  jibbleName: string;
+  days: (WeekDay | null)[]; // one per date in the week, null = not in
+  daysPresent: number;
+  avgIn: number | null;
+  avgOut: number | null;
+  totalWorked: number;
+  avgWorked: number;
+  daysOnTarget: number;
+  totalBreak: number;
+  avgBreak: number;
+  daysOverBreak: number;
+  totalClickup: number | null;
+  avgClickup: number | null;
+  activities: { activity: string | null; project: string | null; minutes: number }[];
+  tasks: { name: string; url: string | null; minutes: number }[];
+};
+
+export type WeekReport = {
+  weekStart: string;
+  dates: string[];
+  generatedAt: string;
+  timezone: string;
+  clickup: boolean;
+  mock: boolean;
+  settings: { workTargetMin: number; breakAllowanceMin: number };
+  departments: string[];
+  people: PersonWeek[];
+  notFound: string[];
+  errors: string[];
+};

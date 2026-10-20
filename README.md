@@ -9,6 +9,7 @@ One link that shows your team live:
 - **Offline**: clocked out (with the time) or not in today.
 - **Today's report**: clock-in, clock-out, worked time vs 7h, ClickUp tracked time, breaks vs 1h 30m, and a colour timeline for each person.
 - **Click anyone's name** to see their day: clock-in, worked time, breaks, a timeline, time per Jibble activity/project (the activity picked at clock-in) and time per ClickUp task.
+- **Weekly**: pick any week (this week, last week, or step back) to see each person's days in, average clock-in and clock-out, average worked time and days on target, average breaks and days over the allowance, ClickUp time per day and coverage, a bar per day, and their Jibble activities and top ClickUp tasks. **Download CSV** for a spreadsheet, or **Print**. Built from Jibble and ClickUp history, so past weeks work too.
 - Live feed, browser alerts, department filters, light and dark mode. Works on phones.
 
 ## Team list

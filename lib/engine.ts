@@ -447,6 +447,16 @@ class Engine {
     return null;
   }
 
+  /** Team members as last matched: their Jibble person, ClickUp member and whether ClickUp applies */
+  roster() {
+    return TEAM.map((member) => {
+      const l = this.links.get(member.name);
+      return { member, person: l?.person || null, cu: l?.cu || null, jibbleOnly: jibbleOnly(member, this.mapping) };
+    });
+  }
+
+  departments() { return this.state().departments; }
+
   find(id: string) { return this.people.find((p) => p.id === id); }
 
   setMode(id: string, mode: 'auto' | 'free' | 'busy') {

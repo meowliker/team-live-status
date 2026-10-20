@@ -117,3 +117,18 @@ export async function getTimers(memberIds: number[]): Promise<Map<number, TimerI
   }
   return out;
 }
+
+/** Raw time entries for these people between two moments (for the weekly report) */
+export async function getEntriesBetween(startMs: number, endMs: number, memberIds: number[]): Promise<any[]> {
+  if (!memberIds.length) return [];
+  const params = new URLSearchParams({ start_date: String(startMs), end_date: String(endMs), assignee: memberIds.join(',') });
+  const { data } = await get(`/team/${CONFIG.clickupTeamId}/time_entries?${params}`);
+  return data || [];
+}
+
+/** Task name and link of a ClickUp time entry */
+export const entryTask = (e: any) => {
+  const t = toTimer(e);
+  return { name: t.task, url: t.url };
+};
+
