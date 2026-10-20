@@ -2,14 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BoardEvent, BoardState, PersonRow } from '@/lib/types';
+import { DEPT_COLORS, ago, dur, fm, hm, initials, mins } from './format';
+import PersonPanel from './PersonPanel';
 
-// ───────────────────────── helpers ─────────────────────────
-const mins = (iso: string | null | undefined) => (iso ? Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60e3)) : 0);
-const fm = (m: number) => (m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`);
-const dur = (iso: string | null | undefined) => fm(mins(iso));
-const initials = (n: string) => n.split(' ').map((x) => x[0]).slice(0, 2).join('').toUpperCase();
-const DEPT_COLORS = ['#2f6bff', '#e5484d', '#12a150', '#8b5cf6', '#e08a00', '#0ea5a4', '#d6409f', '#64748b'];
-const ago = (iso: string) => (mins(iso) < 1 ? 'just now' : `${dur(iso)} ago`);
 
 type Filter = 'all' | 'working' | 'pool' | 'break' | 'attention' | 'out';
 
@@ -22,6 +17,7 @@ export default function Board() {
   const [filter, setFilter] = useState<Filter>('all');
   const [me, setMe] = useState('');
   const [busy, setBusy] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
   const [alerts, setAlerts] = useState<NotificationPermission | 'unsupported'>('default');
   const lastEvent = useRef<string | null>(null);
 
@@ -79,6 +75,7 @@ export default function Board() {
     }
     act({ action: 'pick', personId: id, by: who });
   };
+  const closePanel = useCallback(() => setOpenId(null), []);
   const refresh = async () => { setBusy(true); await act({ action: 'refresh' }); setBusy(false); };
 
   const deptColor = useMemo(() => {
@@ -92,6 +89,7 @@ export default function Board() {
   }
 
   const S = data.settings;
+  const openPerson = openId ? data.people.find((p) => p.id === openId) || null : null;
   const P = dept === 'All' ? data.people : data.people.filter((p) => p.department === dept);
   const needsAttention = (p: PersonRow) => (p.state === 'working' && !!(p.away || p.frozen || p.noScreenshots)) || p.timerWhileOff;
   const attention = P.filter(needsAttention);
@@ -109,9 +107,9 @@ export default function Board() {
   const Card = ({ p, color, badge, children, actions }: { p: PersonRow; color: string; badge: string; children?: React.ReactNode; actions?: React.ReactNode }) => (
     <div className="card" style={{ ['--c' as string]: `var(--${color})` }}>
       <div className="who">
-        <div className="av" style={{ background: deptColor.get(p.department) }}>{initials(p.name)}<i /></div>
+        <button className="av" style={{ background: deptColor.get(p.department) }} onClick={() => setOpenId(p.id)} aria-label={`Open ${p.name}`}>{initials(p.name)}<i /></button>
         <div className="who-t">
-          <div className="nm" title={p.jibbleName}>{p.name}</div>
+          <button className="nm link" title="See their day" onClick={() => setOpenId(p.id)}>{p.name}</button>
           <div className="dept">{p.department}</div>
         </div>
         <span className="badge">{badge}</span>
@@ -221,7 +219,7 @@ export default function Board() {
         <div className="layout">
           <div>
             {tab === 'day' ? (
-              <DayReport people={P} data={data} deptColor={deptColor} />
+              <DayReport people={P} data={data} deptColor={deptColor} onOpen={setOpenId} />
             ) : (
               <>
                 {show('pool') && (
@@ -323,13 +321,13 @@ export default function Board() {
           </aside>
         </div>
       </div>
+      {openPerson && <PersonPanel p={openPerson} data={data} color={deptColor.get(openPerson.department) || DEPT_COLORS[0]} onClose={closePanel} />}
     </>
   );
 }
 
-const hm = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
-function DayReport({ people, data, deptColor }: { people: PersonRow[]; data: BoardState; deptColor: Map<string, string> }) {
+function DayReport({ people, data, deptColor, onOpen }: { people: PersonRow[]; data: BoardState; deptColor: Map<string, string>; onOpen: (id: string) => void }) {
   const S = data.settings;
   const rows = people.filter((p) => p.day).sort((a, b) => b.day!.missed + b.day!.frozen - (a.day!.missed + a.day!.frozen) || b.day!.overBreak - a.day!.overBreak);
   if (!rows.length) return <div className="panel"><div className="empty">Nobody has clocked in today yet.</div></div>;
@@ -369,7 +367,7 @@ function DayReport({ people, data, deptColor }: { people: PersonRow[]; data: Boa
             <div className="dhead">
               <div className="who">
                 <div className="av" style={{ background: deptColor.get(p.department), ['--c' as string]: `var(--${p.state === 'working' ? 'work' : p.state === 'break' ? 'break' : 'out'})` }}>{initials(p.name)}<i /></div>
-                <div className="who-t"><div className="nm">{p.name}</div><div className="dept">{p.department}</div></div>
+                <div className="who-t"><button className="nm link" title="See their day" onClick={() => onOpen(p.id)}>{p.name}</button><div className="dept">{p.department}</div></div>
               </div>
               <span className="num">In <b>{d.firstIn ? hm(d.firstIn) : '–'}</b>{d.lastOut ? <> · Out <b>{hm(d.lastOut)}</b></> : null}</span>
               <span className="num">Worked <b>{fm(d.realWorked)}</b> / {fm(S.workTargetMin)}</span>

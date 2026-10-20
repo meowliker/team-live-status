@@ -1,6 +1,6 @@
 import { CONFIG } from './config';
 import { startOfToday } from './time';
-import type { ClickupMember, Timer, TimerInfo } from './types';
+import type { ClickupMember, TaskTime, Timer, TimerInfo } from './types';
 
 const API = 'https://api.clickup.com/api/v2';
 
@@ -65,7 +65,18 @@ export async function getTimers(memberIds: number[]): Promise<Map<number, TimerI
     return out.get(uid)!;
   };
   const counted = new Set<string>();
-  const add = (uid: number, start: number, end: number) => { info(uid).trackedTodayMin += Math.max(0, end - Math.max(start, sot)) / 60e3; };
+  const perTask = new Map<number, Map<string, TaskTime>>();
+  const add = (uid: number, start: number, end: number, e: any) => {
+    const min = Math.max(0, end - Math.max(start, sot)) / 60e3;
+    info(uid).trackedTodayMin += min;
+    if (min <= 0) return;
+    const t = toTimer(e);
+    if (!perTask.has(uid)) perTask.set(uid, new Map());
+    const tasks = perTask.get(uid)!;
+    const cur = tasks.get(t.task) || { name: t.task, url: t.url, minutes: 0, running: false };
+    cur.minutes += min;
+    tasks.set(t.task, cur);
+  };
 
   for (const e of data || []) {
     const uid = Number(e.user?.id);
@@ -73,7 +84,7 @@ export async function getTimers(memberIds: number[]): Promise<Map<number, TimerI
     const start = Number(e.start);
     const dur = Number(e.duration);
     const running = dur < 0 || !Number(e.end); // running timers have a negative duration and no end
-    add(uid, start, running ? now : Number(e.end) || start + dur);
+    add(uid, start, running ? now : Number(e.end) || start + dur, e);
     counted.add(String(e.id));
     if (running) info(uid).running = toTimer(e);
   }
@@ -90,7 +101,7 @@ export async function getTimers(memberIds: number[]): Promise<Map<number, TimerI
           if (out.has(uid)) out.get(uid)!.running = null; // this endpoint wins over the list
           continue;
         }
-        if (!counted.has(String(e.id))) add(uid, Number(e.start), now);
+        if (!counted.has(String(e.id))) add(uid, Number(e.start), now, e);
         info(uid).running = toTimer(e);
       } catch (err) { failures.push((err as Error).message); }
     }
@@ -98,6 +109,11 @@ export async function getTimers(memberIds: number[]): Promise<Map<number, TimerI
   if (failures.length) console.warn(`ClickUp running timers: ${failures.length} failed, e.g. ${failures[0]}`);
   if (failures.length === memberIds.length) throw new Error(failures[0]);
 
-  for (const v of out.values()) v.trackedTodayMin = Math.round(v.trackedTodayMin);
+  for (const [uid, v] of out) {
+    v.trackedTodayMin = Math.round(v.trackedTodayMin);
+    v.tasks = [...(perTask.get(uid)?.values() || [])]
+      .map((t) => ({ ...t, minutes: Math.round(t.minutes), running: !!v.running && v.running.task === t.name }))
+      .sort((a, b) => b.minutes - a.minutes);
+  }
   return out;
 }

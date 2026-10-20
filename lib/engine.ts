@@ -6,7 +6,7 @@ import * as jibble from './jibble';
 import * as clickup from './clickup';
 import * as mock from './mock';
 import { startOfToday, todayStr } from './time';
-import type { BoardEvent, BoardState, ClickupMember, DayReport, JibbleEntry, JibblePerson, Mapping, Overlay, PersonRow, Segment, SettingsState, Shot, TimerInfo } from './types';
+import type { ActivityTime, BoardEvent, BoardState, ClickupMember, DayReport, JibbleEntry, JibblePerson, Mapping, Overlay, PersonRow, Segment, SettingsState, Shot, TimerInfo } from './types';
 
 const norm = (n: string | null | undefined) => (n || '').toLowerCase().replace(/[^a-z0-9@. ]/g, ' ').replace(/\s+/g, ' ').trim();
 const ms = (a: string, b: string) => new Date(b).getTime() - new Date(a).getTime();
@@ -182,7 +182,10 @@ class Engine {
     const segments: Segment[] = [];
     entries.forEach((e, i) => {
       if (e.type === 'Out') return;
-      segments.push({ kind: e.type === 'StartBreak' ? 'break' : 'work', from: e.time, to: entries[i + 1]?.time || now });
+      segments.push({
+        kind: e.type === 'StartBreak' ? 'break' : 'work', from: e.time, to: entries[i + 1]?.time || now,
+        ...(e.type === 'In' ? { activity: e.activity?.name || null, project: e.project?.name || null } : {}),
+      });
     });
     const overlays: Overlay[] = [];
     if (CONFIG.screenshotChecks) {
@@ -209,6 +212,17 @@ class Engine {
     const worked = sum(segments.filter((x) => x.kind === 'work'));
     const breakLogged = sum(segments.filter((x) => x.kind === 'break'));
     const missed = sum(overlays.filter((x) => x.kind === 'away'));
+    // Time per Jibble activity + project, from the activity picked at each clock-in
+    const acts = new Map<string, ActivityTime>();
+    segments.forEach((x, i) => {
+      if (x.kind !== 'work') return;
+      const key = `${x.activity || ''}\u0000${x.project || ''}`;
+      const a = acts.get(key) || { activity: x.activity || null, project: x.project || null, minutes: 0, current: false };
+      a.minutes += ms(x.from, x.to) / 60e3;
+      if (i === segments.length - 1 && entries.at(-1)?.type === 'In') a.current = true;
+      acts.set(key, a);
+    });
+    const activities = [...acts.values()].map((a) => ({ ...a, minutes: Math.round(a.minutes) })).sort((a, b) => b.minutes - a.minutes);
     return {
       firstIn: entries.find((e) => e.type === 'In')?.time || null,
       lastOut: entries.at(-1)?.type === 'Out' ? entries.at(-1)!.time : null,
@@ -218,7 +232,7 @@ class Engine {
       realWorked: worked - missed,
       totalBreak: breakLogged + missed,
       overBreak: Math.max(0, breakLogged + missed - CONFIG.breakAllowanceMin),
-      segments, overlays,
+      segments, overlays, activities,
     };
   }
 
@@ -324,6 +338,7 @@ class Engine {
           jibbleOnly: jibbleOnly(member, this.mapping),
           timer,
           trackedTodayMin: t ? t.trackedTodayMin : null,
+          clickupTasks: t ? t.tasks || [] : null,
           timerWhileOff: !!timer && state !== 'working',
           ...away,
           day: todays.has(p.id) ? this.dayReport(todays.get(p.id)!, this.shots.get(p.id) || [], nowIso) : null,

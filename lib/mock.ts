@@ -4,6 +4,8 @@ import { todayStr } from './time';
 import type { ClickupMember, JibbleEntry, JibblePerson, Shot, TimerInfo } from './types';
 
 const min = (m: number) => new Date(Date.now() - m * 60e3).toISOString();
+const activities = [['Video editing', 'Bloom Little'], ['Ad scripts', 'Phonics'], ['Meetings', null], ['Design', 'Math Mats']] as const;
+const act = (i: number) => ({ activity: { name: activities[i % 4][0] }, project: activities[i % 4][1] ? { name: activities[i % 4][1]! } : null });
 const tasks = ['Reel v3 – Phonics', 'UGC ad #4 – Bloom Little', 'Art Therapy hook test', 'Landing page – Math Mats', 'Static ads batch 12', 'Crochet guide pages', 'Weekly payout recon', 'Interview scheduling'];
 
 const people: JibblePerson[] = TEAM.map((m, i) => ({
@@ -44,7 +46,7 @@ export async function getRecentEntries(): Promise<JibbleEntry[]> {
   const today = todayStr();
   return people.flatMap((p, i) => {
     const latest: JibbleEntry = { personId: p.id, type: scenario[i][0], time: min(scenario[i][1]), belongsToDate: today };
-    return scenario[i][0] === 'In' ? [{ ...latest, time: min(scenario[i][1] + 60) }, { ...latest, type: 'StartBreak' as const, time: min(scenario[i][1] + 15) }, latest] : [{ ...latest, type: 'In' as const, time: min(scenario[i][1] + 150) }, latest];
+    return scenario[i][0] === 'In' ? [{ ...latest, ...act(i + 1), time: min(scenario[i][1] + 60) }, { ...latest, type: 'StartBreak' as const, time: min(scenario[i][1] + 15) }, { ...latest, ...act(i) }] : [{ ...latest, ...act(i), type: 'In' as const, time: min(scenario[i][1] + 150) }, latest];
   });
 }
 
@@ -68,6 +70,10 @@ export async function getTimers(): Promise<Map<number, TimerInfo>> {
     const running = scenario[i][3];
     map.set(1000 + i, {
       trackedTodayMin: 60 + ((i * 37) % 240),
+      tasks: [
+        { name: tasks[i % tasks.length], url: 'https://app.clickup.com', minutes: 40 + ((i * 37) % 120), running },
+        { name: tasks[(i + 3) % tasks.length], url: 'https://app.clickup.com', minutes: 20 + ((i * 17) % 80), running: false },
+      ],
       running: running ? { task: tasks[i % tasks.length], url: 'https://app.clickup.com', status: 'in progress', startedAt: min(10 + ((i * 13) % 80)) } : null,
     });
   });
