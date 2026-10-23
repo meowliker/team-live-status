@@ -23,7 +23,7 @@ export const TEAM: Member[] = [
   { name: 'Shakthi', department: 'Media Buyer', clickup: false, aliases: ['shakthi@gividreams.com', 'shakthi.official1@gmail.com'] },
 
   { name: 'Deepti', department: 'Editor', aliases: ['deepti@gividreams.com'] },
-  { name: 'Armaan Ali', department: 'Editor', aliases: ['armaan@gividreams.com'] },
+  { name: 'Armaan Ali', department: 'Editor', aliases: ['Arman Ali', 'armaan@gividreams.com'] },
   { name: 'Pankaj Kumar', department: 'Editor', aliases: ['pankaj@gividreams.com'] },
   { name: 'Tamim Ahmad', department: 'Editor', aliases: ['tamim@gividreams.com'] },
   { name: 'Harish Kumar', department: 'Editor', aliases: ['harish@gividreams.com'] },
@@ -34,7 +34,7 @@ export const TEAM: Member[] = [
 
   { name: 'Vidit', department: 'Website Designer', aliases: ['vidit@gividreams.com'] },
   { name: 'Anay', department: 'Website Designer', aliases: ['anay@gividreams.com'] },
-  { name: 'Pragati Shukla', department: 'Website Designer', aliases: ['pragati@gividreams.com'] },
+  { name: 'Pragati Shukla', department: 'Website Designer', aliases: ['Pragati', 'pragati@gividreams.com'] },
 
   { name: 'Kazeem', department: 'Email Marketing', aliases: ['kazeem@gividreams.com'] },
 
