@@ -1,5 +1,7 @@
 # Team Live
 
+> **New to this project?** Read [`CLAUDE.md`](CLAUDE.md) first: how it works, where data lives, how to deploy and change it.
+
 One link that shows your team live:
 
 - **Working now**: who is clocked in on Jibble, and the **task their ClickUp timer is running on** (with how long it has been running).
