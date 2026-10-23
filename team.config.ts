@@ -36,11 +36,11 @@ export const TEAM: Member[] = [
   { name: 'Anay', department: 'Website Designer', aliases: ['anay@gividreams.com'] },
   { name: 'Pragati Shukla', department: 'Website Designer', aliases: ['Pragati', 'pragati@gividreams.com'] },
 
-  { name: 'Kazeem', department: 'Email Marketing', aliases: ['kazeem@gividreams.com'] },
+  { name: 'Kazeem', department: 'Email Marketing', clickup: false, aliases: ['kazeem@gividreams.com'] },
 
-  { name: 'Mahesh', department: 'Finance', aliases: ['mahesh@gividreams.com'] },
+  { name: 'Mahesh', department: 'Finance', clickup: false, aliases: ['mahesh@gividreams.com'] },
 
-  { name: 'Santushti', department: 'HR', aliases: ['santushti@gividreams.com'] },
+  { name: 'Santushti', department: 'HR', clickup: false, aliases: ['santushti@gividreams.com'] },
 ];
 
 // Order of department lanes on the board
