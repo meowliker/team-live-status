@@ -84,7 +84,7 @@ app/
 - When someone clocks out, their Free/Busy choice and pool assignment are cleared.
 - **Jibble "tasks"** = the activity and project picked at clock-in. Each `In` entry starts a work segment carrying that activity/project.
 - **Slack, Needs attention:** one DM per problem (blank screen, frozen screen, no screenshots, ClickUp timer on break, ClickUp timer after clock-out). If still there `SLACK_REMIND_MINUTES` (10) after the DM: a reminder in the thread, and a DM to each name in `SLACK_MANAGERS` (`team.config.ts`; currently Apurwa), never about their own alert. When it clears: "✅ Sorted" in the threads, and no new message about the same thing for 15 min.
-- **Slack, pool:** when someone joins the pool, a post in `SLACK_POOL_CHANNEL` (default `#creatives`) tagging everyone in `SLACK_POOL_TAG_DEPARTMENTS` (Creative Strategist, Media Buyer) who is in today (all of them if nobody is). When they leave the pool, a thread reply says why (assigned by X, clocked out, or removed).
+- **Slack, pool:** when someone joins the pool, a post in `SLACK_POOL_CHANNEL` (default `#creatives`) tagging everyone in `SLACK_POOL_TAG_DEPARTMENTS` (Creative Strategist, Media Buyer) who is in today (all of them if nobody is), plus `SLACK_POOL_ALWAYS_TAG` (Chirayu, Nischay, Anurag by email) whether clocked in or not. If they're still in the pool after `POOL_IDLE_ALERT_MINUTES` (15), one reminder in the thread tags them all again. When they leave the pool, a thread reply says why (assigned by X, clocked out, or removed).
 - People are found in Slack by their Jibble email, or the `slack` email on their `team.config.ts` line. Slack state (open alerts, pool posts) is saved to `alerts.json` so a restart doesn't send duplicates.
 
 ### Matching people (Jibble ↔ roster ↔ ClickUp)
@@ -163,7 +163,7 @@ npx tsc --noEmit             # typecheck (there is no test suite or linter confi
 | Fix someone not found or not linked | Settings page (no deploy needed, but needs the volume), or an alias in `team.config.ts` |
 | Change thresholds or timezone | Environment variables on Railway (no code change) |
 | Change the look | `app/globals.css`: colour tokens at the top (`:root` and the light-mode block) |
-| Change who's told on Slack | `SLACK_MANAGERS` (escalations) and `SLACK_POOL_TAG_DEPARTMENTS` (pool posts) in `team.config.ts`; message wording in `lib/alerts.ts` |
+| Change who's told on Slack | `SLACK_MANAGERS` (escalations), `SLACK_POOL_TAG_DEPARTMENTS` and `SLACK_POOL_ALWAYS_TAG` (pool posts) in `team.config.ts`; message wording in `lib/alerts.ts` |
 
 ## Decisions and gotchas
 
@@ -187,6 +187,7 @@ npx tsc --noEmit             # typecheck (there is no test suite or linter confi
 7. ClickUp time during Jibble breaks removed and flagged; pool made manual (`AUTO_POOL`); Daily tab for any date with per-day CSV.
 8. ClickUp time after clock-out removed too; a ClickUp timer on a "Pool" task puts the person in the pool (`POOL_TASK_WORD`).
 9. Slack: Needs-attention DMs with reminder + manager escalation, and pool posts in #creatives.
+10. Pool posts always tag Chirayu, Nischay and Anurag; one pool reminder after 15 min.
 
 ## Ideas not built yet
 
