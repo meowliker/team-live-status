@@ -1,6 +1,6 @@
 import { CONFIG } from './config';
 import { startOfToday } from './time';
-import type { ClickupMember, TaskTime, Timer, TimerInfo } from './types';
+import type { ClickupMember, ClickupSpan, TaskTime, Timer, TimerInfo } from './types';
 
 const API = 'https://api.clickup.com/api/v2';
 
@@ -66,11 +66,14 @@ export async function getTimers(memberIds: number[]): Promise<Map<number, TimerI
   };
   const counted = new Set<string>();
   const perTask = new Map<number, Map<string, TaskTime>>();
+  const spans = new Map<number, ClickupSpan[]>();
   const add = (uid: number, start: number, end: number, e: any) => {
     const min = Math.max(0, end - Math.max(start, sot)) / 60e3;
     info(uid).trackedTodayMin += min;
     if (min <= 0) return;
     const t = toTimer(e);
+    if (!spans.has(uid)) spans.set(uid, []);
+    spans.get(uid)!.push({ from: Math.max(start, sot), to: end, task: t.task, url: t.url });
     if (!perTask.has(uid)) perTask.set(uid, new Map());
     const tasks = perTask.get(uid)!;
     const cur = tasks.get(t.task) || { name: t.task, url: t.url, minutes: 0, running: false };
@@ -111,6 +114,7 @@ export async function getTimers(memberIds: number[]): Promise<Map<number, TimerI
 
   for (const [uid, v] of out) {
     v.trackedTodayMin = Math.round(v.trackedTodayMin);
+    v.entries = spans.get(uid) || [];
     v.tasks = [...(perTask.get(uid)?.values() || [])]
       .map((t) => ({ ...t, minutes: Math.round(t.minutes), running: !!v.running && v.running.task === t.name }))
       .sort((a, b) => b.minutes - a.minutes);

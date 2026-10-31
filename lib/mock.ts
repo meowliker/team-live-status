@@ -4,6 +4,7 @@ import { addDays, startOfDay, todayStr } from './time';
 import type { ClickupMember, JibbleEntry, JibblePerson, Shot, TimerInfo } from './types';
 
 const min = (m: number) => new Date(Date.now() - m * 60e3).toISOString();
+const ms = (m: number) => Date.now() - m * 60e3;
 const activities = [['Video editing', 'Bloom Little'], ['Ad scripts', 'Phonics'], ['Meetings', null], ['Design', 'Math Mats']] as const;
 const act = (i: number) => ({ activity: { name: activities[i % 4][0] }, project: activities[i % 4][1] ? { name: activities[i % 4][1]! } : null });
 const tasks = ['Reel v3 – Phonics', 'UGC ad #4 – Bloom Little', 'Art Therapy hook test', 'Landing page – Math Mats', 'Static ads batch 12', 'Crochet guide pages', 'Weekly payout recon', 'Interview scheduling'];
@@ -75,6 +76,11 @@ export async function getTimers(): Promise<Map<number, TimerInfo>> {
         { name: tasks[(i + 3) % tasks.length], url: 'https://app.clickup.com', minutes: 20 + ((i * 17) % 80), running: false },
       ],
       running: running ? { task: tasks[i % tasks.length], url: 'https://app.clickup.com', status: 'in progress', startedAt: min(10 + ((i * 13) % 80)) } : null,
+      // A running timer started before their last break, so part of it overlaps the break
+      entries: [
+        { from: ms(scenario[i][1] + 200), to: ms(scenario[i][1] + 170), task: tasks[(i + 3) % tasks.length], url: 'https://app.clickup.com' },
+        ...(running ? [{ from: ms(scenario[i][1] + 60), to: Date.now(), task: tasks[i % tasks.length], url: 'https://app.clickup.com' }] : []),
+      ],
     });
   });
   return map;
@@ -129,7 +135,8 @@ export async function getClickupEntriesBetween(startMs: number, endMs: number): 
     people.forEach((_, i) => {
       if (!workDay(i, date)) return;
       const [t0, t1, t2, t3] = dayPlan(i, date);
-      [[t0 + 10 * 60e3, t1 - 5 * 60e3], [t2 + 5 * 60e3, t3 - (20 + rnd(i, date, 'gap') * 60) * 60e3]].forEach(([a, b], k) => {
+      // every third person forgets to stop their timer for the break
+      [[t0 + 10 * 60e3, t1 + (i % 3 === 0 ? 20 : -5) * 60e3], [t2 + 5 * 60e3, t3 - (20 + rnd(i, date, 'gap') * 60) * 60e3]].forEach(([a, b], k) => {
         const name = tasks[(i + k + Math.floor(rnd(i, date, 't') * 4)) % tasks.length];
         out.push({ id: `${i}-${date}-${k}`, user: { id: 1000 + i }, start: String(a), end: String(b), duration: String(b - a), task: { id: `t${name.length}`, name } });
       });

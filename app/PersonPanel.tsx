@@ -47,7 +47,7 @@ export default function PersonPanel({ p, data, color, onClose }: { p: PersonRow;
               <div><span>Clock-in</span><b>{d.firstIn ? hm(d.firstIn) : '–'}</b>{d.lastOut && <small>out {hm(d.lastOut)}</small>}</div>
               <div><span>Worked</span><b>{fm(d.realWorked)}</b><small>of {fm(S.workTargetMin)}</small></div>
               <div className={d.overBreak ? 'amber' : ''}><span>Breaks</span><b>{fm(d.totalBreak)}</b><small>of {fm(S.breakAllowanceMin)}</small></div>
-              {p.trackedTodayMin !== null && <div><span>ClickUp</span><b>{fm(p.trackedTodayMin)}</b><small>tracked</small></div>}
+              {p.trackedTodayMin !== null && <div><span>ClickUp</span><b>{fm(p.trackedTodayMin)}</b><small className={p.clickupOnBreak ? 'bad' : ''}>{p.clickupOnBreak ? `−${fm(p.clickupOnBreak.minutes)} on break` : 'tracked'}</small></div>}
             </div>
 
             <div className="bar">
@@ -92,6 +92,9 @@ export default function PersonPanel({ p, data, color, onClose }: { p: PersonRow;
                     ))}
                   </div>
                 ) : <div className="empty">No ClickUp time tracked today.</div>}
+                {p.clickupOnBreak && <div className="removed">{p.clickupOnBreak.spans.map((x, i) => (
+                  <div key={i}>Removed {fm(x.minutes)}: “{x.task}” ran {hm(x.from)}–{hm(x.to)} during a break</div>
+                ))}</div>}
               </>
             )}
           </>

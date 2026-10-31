@@ -6,6 +6,7 @@ import * as jibble from './jibble';
 import * as clickup from './clickup';
 import * as mock from './mock';
 import { startOfToday, todayStr } from './time';
+import { removeBreakTime } from './overlap';
 import type { ActivityTime, BoardEvent, BoardState, ClickupMember, DayReport, JibbleEntry, JibblePerson, Mapping, Overlay, PersonRow, Segment, SettingsState, Shot, TimerInfo } from './types';
 
 const norm = (n: string | null | undefined) => (n || '').toLowerCase().replace(/[^a-z0-9@. ]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -320,11 +321,15 @@ class Engine {
         const mode = (this.pool.modes[p.id] || 'auto') as PersonRow['mode'];
         const pick = this.pool.picks[p.id] || null;
         const timerKnown = !!(cu && tmap);
-        const inPool = state === 'working' && !pick && (mode === 'free' || (mode === 'auto' && (timerKnown ? !timer : !clickupOn())));
+        const inPool = state === 'working' && !pick && (mode === 'free' || (CONFIG.autoPool && mode === 'auto' && (timerKnown ? !timer : !clickupOn())));
         if (inPool && !this.poolSince.has(p.id)) this.poolSince.set(p.id, this.prev.size ? nowIso : (since || nowIso));
         if (!inPool) this.poolSince.delete(p.id);
 
         const away = state === 'working' && CONFIG.screenshotChecks ? this.awayInfo(p.id, since!) : { away: null, frozen: null, noScreenshots: null, blankStreak: 0 };
+        const day = todays.has(p.id) ? this.dayReport(todays.get(p.id)!, this.shots.get(p.id) || [], nowIso) : null;
+        // ClickUp time that ran during a Jibble break is taken off their ClickUp hours
+        const breaks = (day?.segments || []).filter((x) => x.kind === 'break').map((x) => ({ from: new Date(x.from).getTime(), to: new Date(x.to).getTime() }));
+        const cuDay = t?.entries ? removeBreakTime(t.entries, breaks) : null;
         const row: PersonRow = {
           id: p.id,
           name: member.name,
@@ -337,11 +342,12 @@ class Engine {
           clickupLinked: !!cu,
           jibbleOnly: jibbleOnly(member, this.mapping),
           timer,
-          trackedTodayMin: t ? t.trackedTodayMin : null,
-          clickupTasks: t ? t.tasks || [] : null,
+          trackedTodayMin: cuDay ? cuDay.trackedMin : t ? t.trackedTodayMin : null,
+          clickupTasks: cuDay ? cuDay.tasks.map((x) => ({ ...x, running: x.name === timer?.task })) : t ? t.tasks || [] : null,
+          clickupOnBreak: cuDay && cuDay.removedMin > 0 ? { minutes: cuDay.removedMin, spans: cuDay.onBreak } : null,
           timerWhileOff: !!timer && state !== 'working',
           ...away,
-          day: todays.has(p.id) ? this.dayReport(todays.get(p.id)!, this.shots.get(p.id) || [], nowIso) : null,
+          day,
         };
 
         const before = this.prev.get(p.id);
@@ -355,6 +361,7 @@ class Engine {
             else if (before.timer) this.pushEvent(member.name, `stopped timer: ${before.timer.task}`, 'timer');
           }
           if (!before.inPool && inPool) this.pushEvent(member.name, 'joined the pool', 'pool');
+          if (!before.timerWhileOff && row.timerWhileOff && state === 'break') this.pushEvent(member.name, `ClickUp timer still running on break (${timer!.task}): this time is removed from their ClickUp hours`, 'alert');
           if (!before.frozen && row.frozen) this.pushEvent(member.name, `screen hasn't changed for ${row.frozen.minutes} min`, 'alert');
           if (!before.away && row.away) this.pushEvent(member.name, `looks away: blank screen ${row.away.minutes} min without a break`, 'alert');
         }
@@ -381,6 +388,7 @@ class Engine {
       clickup: clickupOn(),
       screenshots: CONFIG.screenshotChecks,
       timezone: CONFIG.timezone,
+      autoPool: CONFIG.autoPool,
       settings: {
         awayMin: CONFIG.awayMin, frozenMin: CONFIG.frozenMin, breakAllowanceMin: CONFIG.breakAllowanceMin,
         workTargetMin: CONFIG.workTargetMin, longBreakMin: CONFIG.longBreakMin, poolIdleAlertMin: CONFIG.poolIdleAlertMin,
@@ -465,7 +473,7 @@ class Engine {
     if (mode === 'auto') delete this.pool.modes[id];
     else this.pool.modes[id] = mode;
     this.savePool();
-    this.pushEvent(p.name, mode === 'free' ? 'was marked free' : mode === 'busy' ? 'was marked busy' : 'set back to auto (ClickUp timer)', 'pool');
+    this.pushEvent(p.name, mode === 'free' ? (CONFIG.autoPool ? 'was marked free' : 'was added to the pool') : mode === 'busy' ? 'was marked busy' : (CONFIG.autoPool ? 'set back to auto (ClickUp timer)' : 'was removed from the pool'), 'pool');
     return null;
   }
 

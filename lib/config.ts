@@ -23,6 +23,8 @@ export const CONFIG = {
   longBreakMin: num(process.env.LONG_BREAK_MINUTES, 45),
   workTargetMin: num(process.env.WORK_TARGET_MINUTES, 420),
   poolIdleAlertMin: num(process.env.POOL_IDLE_ALERT_MINUTES, 15),
+  // off = people join the pool only when someone adds them; on = anyone clocked in without a ClickUp timer
+  autoPool: on(process.env.AUTO_POOL, false),
 };
 
 export const clickupOn = () => CONFIG.mock || !!(CONFIG.clickupToken && CONFIG.clickupTeamId);

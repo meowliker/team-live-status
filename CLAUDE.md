@@ -16,8 +16,8 @@ A single web page that shows a team **live**: who is working, on break, free to 
 
 | Area | What it shows |
 |---|---|
-| **Live board** (`/`) | Tiles (Working / In pool / On break / Needs attention / Offline), department filter chips, and panels: **Pool** (clocked in on Jibble with no ClickUp timer, split by department, with **Assign**), **Needs attention**, **On break**, **Assigned from pool**, **Working now** (with the running ClickUp task), **Offline**, and a **Live feed** of changes. Browser notifications are optional. |
-| **Today's report** tab | Per person: clock-in/out, worked time vs target, ClickUp tracked time, breaks vs allowance, missed-break and frozen-screen flags, and a colour timeline. |
+| **Live board** (`/`) | Tiles (Working / In pool / On break / Needs attention / Offline), department filter chips, and panels: **Pool** (people added by hand with **＋ Add to pool**, split by department, with **Assign** and **Remove from pool**), **Needs attention**, **On break**, **Assigned from pool**, **Working now** (with the running ClickUp task), **Offline**, and a **Live feed** of changes. Browser notifications are optional. |
+| **Daily** tab | Any date (Today / Yesterday / ‹ › / date picker). Today is the live report: clock-in/out, worked vs target, ClickUp tracked, breaks vs allowance, missed-break and frozen-screen flags, colour timeline. Past days are rebuilt from Jibble + ClickUp history (no screenshot flags) and each row expands to that day's Jibble activities and ClickUp tasks. **Download CSV** per day. |
 | **Weekly** tab | Pick a week (This week / Last week / ‹ ›). Team averages, then per person: days in, avg clock-in/out, avg worked per day and days on target, avg break and days over allowance, ClickUp per day and coverage, and a bar per day. Click a row for day-by-day numbers, Jibble activities and top ClickUp tasks. **Download CSV** and **Print**. |
 | **Person panel** | Click any name or avatar: their day, timeline, time per Jibble activity + project, and time per ClickUp task. |
 | **Settings** (`/settings`) | Link each team member to a Jibble person and a ClickUp member by hand (overrides auto matching), or mark them "Not on ClickUp". Lists unlinked Jibble/ClickUp accounts. Warns if data would be wiped on redeploy. |
@@ -41,20 +41,22 @@ lib/
                           pool, alerts, day reports, live feed; persists small JSON files
   jibble.ts             ← Jibble API client (OAuth client-credentials), entries, screenshots, image analysis
   clickup.ts            ← ClickUp API client: members, today's timers (+ running timer per person), ranges
-  week.ts               ← Weekly report builder (fetches a week of history) + CSV export
+  week.ts               ← Week/day history builder (a week of Jibble + ClickUp history) + weekly and daily CSV
+  overlap.ts            ← Removes ClickUp time that ran during Jibble breaks
   time.ts               ← Timezone-aware date helpers (team timezone, not server/browser timezone)
   types.ts              ← Shared types (BoardState, PersonRow, DayReport, WeekReport, …)
   mock.ts               ← Fake data for demo mode (MOCK=1), including past days for the weekly report
 app/
-  page.tsx → Board.tsx  ← Live board + Today's report + Weekly tab (client component, polls /api/state every 15s)
+  page.tsx → Board.tsx  ← Live board, today's live report (used by Daily) and tabs (client component, polls /api/state every 15s)
   PersonPanel.tsx       ← Side panel opened by clicking a name
   WeekReport.tsx        ← Weekly tab UI
+  DailyReport.tsx       ← Daily tab: date navigation; today = live report, past days from /api/week
   format.ts             ← Display helpers (durations, times, initials, avatar gradients)
   settings/             ← Settings page (Jibble/ClickUp linking)
   api/state             ← GET: full board state
   api/action            ← POST: refresh | pick | release | mode (free/busy/auto)
   api/settings          ← GET/POST: manual Jibble/ClickUp links
-  api/week              ← GET ?start=YYYY-MM-DD [&format=csv] [&fresh=1]: weekly report
+  api/week              ← GET ?start=YYYY-MM-DD [&format=csv [&day=YYYY-MM-DD]] [&fresh=1]: weekly report, or one day's CSV
 ```
 
 ## How it works
@@ -70,7 +72,8 @@ app/
 
 ### Key rules
 
-- **Pool** = clocked in (working) **and** not assigned **and** (marked *Free*, or *Auto* with no ClickUp timer running). People marked Jibble-only are never auto-pooled while ClickUp is configured.
+- **Pool** = clocked in (working) **and** not assigned **and** added by hand (`mode: free` in `pool.json`). Nobody joins automatically unless `AUTO_POOL=on`, which restores the old rule (*Auto* + no ClickUp timer running). Releasing an assigned person puts them back in the pool; clocking out clears it.
+- **ClickUp time during a Jibble break** is removed from ClickUp hours (live board, Daily, Weekly, CSV) and listed with task and times (`lib/overlap.ts`). Only logged Jibble breaks count, not missed (blank-screen) breaks or time after clock-out. A live-feed alert fires when someone goes on break with a timer running.
 - **Needs attention** = working and (blank screen ≥ `AWAY_MINUTES` without a break, **or** screen frozen ≥ `FROZEN_MINUTES`, **or** no screenshots ≥ `NO_SCREENSHOT_MINUTES`), **or** a ClickUp timer still running while on break or clocked out.
 - **Missed break** = a run of blank screenshots during work time ≥ `AWAY_MINUTES`. This is an estimate, because Jibble takes a screenshot roughly every 10 minutes.
 - **Worked** = Jibble work time minus missed-break time. **Total break** = logged breaks + missed breaks.
@@ -117,6 +120,7 @@ See `.env.example`. **Never commit real keys.** `.env` is gitignored, and on Rai
 | `AWAY_MINUTES`, `NO_SCREENSHOT_MINUTES`, `FROZEN_MINUTES` | Alert thresholds |
 | `BREAK_ALLOWANCE_MINUTES` (90), `LONG_BREAK_MINUTES` (45), `WORK_TARGET_MINUTES` (420), `POOL_IDLE_ALERT_MINUTES` (15) | Report and alert thresholds |
 | `DATA_DIR` | Where JSON files are saved (see above) |
+| `AUTO_POOL` | `off` (default): the pool is filled by hand. `on`: anyone clocked in with no ClickUp timer joins automatically |
 | `MOCK=1` | Demo mode with fake data, no keys needed |
 
 ## Running it
@@ -166,6 +170,7 @@ npx tsc --noEmit             # typecheck (there is no test suite or linter confi
 4. `clickup: false` (Jibble-only people) and roster changes.
 5. Person panel (Jibble activities + ClickUp tasks per day) and the new aurora theme.
 6. Weekly tab with averages, CSV and print.
+7. ClickUp time during Jibble breaks removed and flagged; pool made manual (`AUTO_POOL`); Daily tab for any date with per-day CSV.
 
 ## Ideas not built yet
 
