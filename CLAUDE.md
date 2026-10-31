@@ -20,6 +20,7 @@ A single web page that shows a team **live**: who is working, on break, free to 
 | **Daily** tab | Any date (Today / Yesterday / ‹ › / date picker). Today is the live report: clock-in/out, worked vs target, ClickUp tracked, breaks vs allowance, missed-break and frozen-screen flags, colour timeline. Past days are rebuilt from Jibble + ClickUp history (no screenshot flags) and each row expands to that day's Jibble activities and ClickUp tasks. **Download CSV** per day. |
 | **Weekly** tab | Pick a week (This week / Last week / ‹ ›). Team averages, then per person: days in, avg clock-in/out, avg worked per day and days on target, avg break and days over allowance, ClickUp per day and coverage, and a bar per day. Click a row for day-by-day numbers, Jibble activities and top ClickUp tasks. **Download CSV** and **Print**. |
 | **Person panel** | Click any name or avatar: their day, timeline, time per Jibble activity + project, and time per ClickUp task. |
+| **Slack** (optional) | DMs for *Needs attention* (reminder + managers after `SLACK_REMIND_MINUTES`, "✅ Sorted" when fixed) and pool posts in `SLACK_POOL_CHANNEL` tagging `SLACK_POOL_TAG_DEPARTMENTS`, with "✅ Assigned by …" in the thread. |
 | **Settings** (`/settings`) | Link each team member to a Jibble person and a ClickUp member by hand (overrides auto matching), or mark them "Not on ClickUp". Lists unlinked Jibble/ClickUp accounts. Warns if data would be wiped on redeploy. |
 
 ## Tech stack
@@ -43,6 +44,8 @@ lib/
   clickup.ts            ← ClickUp API client: members, today's timers (+ running timer per person), ranges
   week.ts               ← Week/day history builder (a week of Jibble + ClickUp history) + weekly and daily CSV
   overlap.ts            ← Removes ClickUp time that ran off the clock (Jibble breaks, after clock-out)
+  alerts.ts             ← Slack rules: Needs-attention DMs, reminders, manager messages, pool channel posts
+  slack.ts              ← Slack Web API client (bot token): find users by email, DM, post, thread replies
   time.ts               ← Timezone-aware date helpers (team timezone, not server/browser timezone)
   types.ts              ← Shared types (BoardState, PersonRow, DayReport, WeekReport, …)
   mock.ts               ← Fake data for demo mode (MOCK=1), including past days for the weekly report
@@ -68,6 +71,7 @@ app/
    - Match team members to Jibble people, then to ClickUp members (see *Matching* below).
    - Build a `PersonRow` per person: state (`working` / `break` / `out` from the latest Jibble entry), running timer, pool status, alerts, and the day report (segments, overlays, activities, ClickUp tasks).
    - Compare with the previous poll to push **live feed events**.
+   - Run the **Slack** rules (`lib/alerts.ts`) on the new rows, if `SLACK_BOT_TOKEN` is set.
 3. **Browser:** `Board.tsx` fetches `/api/state` every 15s and renders it. Buttons POST to `/api/action`.
 
 ### Key rules
@@ -79,6 +83,9 @@ app/
 - **Worked** = Jibble work time minus missed-break time. **Total break** = logged breaks + missed breaks.
 - When someone clocks out, their Free/Busy choice and pool assignment are cleared.
 - **Jibble "tasks"** = the activity and project picked at clock-in. Each `In` entry starts a work segment carrying that activity/project.
+- **Slack, Needs attention:** one DM per problem (blank screen, frozen screen, no screenshots, ClickUp timer on break, ClickUp timer after clock-out). If still there `SLACK_REMIND_MINUTES` (10) after the DM: a reminder in the thread, and a DM to each name in `SLACK_MANAGERS` (`team.config.ts`; currently Apurwa), never about their own alert. When it clears: "✅ Sorted" in the threads, and no new message about the same thing for 15 min.
+- **Slack, pool:** when someone joins the pool, a post in `SLACK_POOL_CHANNEL` (default `#creatives`) tagging everyone in `SLACK_POOL_TAG_DEPARTMENTS` (Creative Strategist, Media Buyer) who is in today (all of them if nobody is). When they leave the pool, a thread reply says why (assigned by X, clocked out, or removed).
+- People are found in Slack by their Jibble email, or the `slack` email on their `team.config.ts` line. Slack state (open alerts, pool posts) is saved to `alerts.json` so a restart doesn't send duplicates.
 
 ### Matching people (Jibble ↔ roster ↔ ClickUp)
 
@@ -96,6 +103,7 @@ There is **no database**. Everything comes live from Jibble and ClickUp and is h
 | File | Contents |
 |---|---|
 | `mapping.json` | Manual links from the Settings page |
+| `alerts.json` | Open Slack alerts and pool posts (so a restart doesn't re-send) |
 | `pool.json` | Free/Busy modes and who assigned whom from the pool |
 | `shots.json` | Today's analysed screenshots, so a restart doesn't re-download them |
 
@@ -122,6 +130,10 @@ See `.env.example`. **Never commit real keys.** `.env` is gitignored, and on Rai
 | `DATA_DIR` | Where JSON files are saved (see above) |
 | `AUTO_POOL` | `off` (default): the pool is filled by hand (and by Pool timers). `on`: anyone clocked in with no ClickUp timer joins automatically |
 | `POOL_TASK_WORD` | A running ClickUp timer on a task whose name starts with this word puts the person in the pool (default `pool`; empty turns it off) |
+| `SLACK_BOT_TOKEN` | Slack bot token (`xoxb-…`, scopes `chat:write`, `im:write`, `users:read`, `users:read.email`). Slack is off without it |
+| `SLACK_POOL_CHANNEL` | Channel for pool posts (default `#creatives`; the bot must be invited). Empty = no pool posts |
+| `SLACK_REMIND_MINUTES` | Minutes before the reminder + manager message (default 10) |
+| `SLACK_DRY_RUN` | `on` logs Slack messages instead of sending (always on in demo mode) |
 | `MOCK=1` | Demo mode with fake data, no keys needed |
 
 ## Running it
@@ -151,6 +163,7 @@ npx tsc --noEmit             # typecheck (there is no test suite or linter confi
 | Fix someone not found or not linked | Settings page (no deploy needed, but needs the volume), or an alias in `team.config.ts` |
 | Change thresholds or timezone | Environment variables on Railway (no code change) |
 | Change the look | `app/globals.css`: colour tokens at the top (`:root` and the light-mode block) |
+| Change who's told on Slack | `SLACK_MANAGERS` (escalations) and `SLACK_POOL_TAG_DEPARTMENTS` (pool posts) in `team.config.ts`; message wording in `lib/alerts.ts` |
 
 ## Decisions and gotchas
 
@@ -173,6 +186,7 @@ npx tsc --noEmit             # typecheck (there is no test suite or linter confi
 6. Weekly tab with averages, CSV and print.
 7. ClickUp time during Jibble breaks removed and flagged; pool made manual (`AUTO_POOL`); Daily tab for any date with per-day CSV.
 8. ClickUp time after clock-out removed too; a ClickUp timer on a "Pool" task puts the person in the pool (`POOL_TASK_WORD`).
+9. Slack: Needs-attention DMs with reminder + manager escalation, and pool posts in #creatives.
 
 ## Ideas not built yet
 
