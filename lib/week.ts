@@ -4,7 +4,8 @@ import * as jibble from './jibble';
 import * as clickup from './clickup';
 import * as mock from './mock';
 import { addDays, mondayOf, startOfDay, todayStr } from './time';
-import type { JibbleEntry, PersonWeek, WeekDay, WeekReport } from './types';
+import type { ClickupSpan, JibbleEntry, PersonWeek, Segment, WeekDay, WeekReport } from './types';
+import { offClockSpans, removeOffClockTime } from './overlap';
 
 // Past weeks don't change, so keep them for an hour; the current week for 5 minutes
 const cache = new Map<string, { at: number; ttl: number; data: Promise<WeekReport> }>();
@@ -48,24 +49,19 @@ async function buildWeek(weekStart: string): Promise<WeekReport> {
     })(),
   ]);
 
-  // ClickUp minutes per user per day, and per task over the week
-  const cuDay = new Map<string, number>(); // `${uid}|${date}`
-  const cuTasks = new Map<number, Map<string, { name: string; url: string | null; minutes: number }>>();
+  // ClickUp timer stretches per user per day (by the day the timer started)
+  const cuSpans = new Map<string, ClickupSpan[]>(); // `${uid}|${date}`
   for (const x of cuEntries || []) {
     const uid = Number(x.user?.id);
     const start = Number(x.start);
     const dur = Number(x.duration);
     const end = dur < 0 || !Number(x.end) ? now : Number(x.end);
-    const min = Math.max(0, end - start) / 60e3;
     const date = todayStr(new Date(start));
-    if (!uid || !min || !dates.includes(date)) continue;
-    cuDay.set(`${uid}|${date}`, (cuDay.get(`${uid}|${date}`) || 0) + min);
+    if (!uid || end <= start || !dates.includes(date)) continue;
+    const key = `${uid}|${date}`;
+    if (!cuSpans.has(key)) cuSpans.set(key, []);
     const t = clickup.entryTask(x);
-    if (!cuTasks.has(uid)) cuTasks.set(uid, new Map());
-    const m = cuTasks.get(uid)!;
-    const cur = m.get(t.name) || { ...t, minutes: 0 };
-    cur.minutes += min;
-    m.set(t.name, cur);
+    cuSpans.get(key)!.push({ from: start, to: end, task: t.name, url: t.url });
   }
 
   const byPerson = new Map<string, JibbleEntry[]>();
@@ -77,7 +73,6 @@ async function buildWeek(weekStart: string): Promise<WeekReport> {
 
   const people: PersonWeek[] = linked.map(({ member, person, cu, jibbleOnly }) => {
     const mine = byPerson.get(person!.id) || [];
-    const acts = new Map<string, { activity: string | null; project: string | null; minutes: number }>();
     const useCu = !!cu && !jibbleOnly && cuEntries !== null;
 
     const days: (WeekDay | null)[] = dates.map((date) => {
@@ -86,29 +81,37 @@ async function buildWeek(weekStart: string): Promise<WeekReport> {
       const dayStart = startOfDay(date).getTime();
       // A day left open (no clock-out) ends at midnight, or now for today
       const cap = Math.max(Math.min(now, startOfDay(addDays(date, 1)).getTime()), new Date(list.at(-1)!.time).getTime());
-      let worked = 0;
-      let breaks = 0;
+      const segments: Segment[] = [];
       list.forEach((x, i) => {
         if (x.type === 'Out') return;
-        const a = new Date(x.time).getTime();
-        const b = i + 1 < list.length ? new Date(list[i + 1].time).getTime() : cap;
-        const min = Math.max(0, b - a) / 60e3;
-        if (x.type === 'StartBreak') { breaks += min; return; }
-        worked += min;
-        const key = `${x.activity?.name || ''}\u0000${x.project?.name || ''}`;
-        const cur = acts.get(key) || { activity: x.activity?.name || null, project: x.project?.name || null, minutes: 0 };
-        cur.minutes += min;
-        acts.set(key, cur);
+        const to = i + 1 < list.length ? list[i + 1].time : new Date(cap).toISOString();
+        segments.push(x.type === 'StartBreak'
+          ? { kind: 'break', from: x.time, to }
+          : { kind: 'work', from: x.time, to, activity: x.activity?.name || null, project: x.project?.name || null });
       });
+      const len = (x: Segment) => Math.max(0, new Date(x.to).getTime() - new Date(x.from).getTime()) / 60e3;
+      const acts = new Map<string, { activity: string | null; project: string | null; minutes: number }>();
+      for (const x of segments.filter((x) => x.kind === 'work')) {
+        const key = `${x.activity || ''}\u0000${x.project || ''}`;
+        const cur = acts.get(key) || { activity: x.activity || null, project: x.project || null, minutes: 0 };
+        cur.minutes += len(x);
+        acts.set(key, cur);
+      }
+      const cuDay = useCu ? removeOffClockTime(cuSpans.get(`${cu!.id}|${date}`) || [], offClockSpans(segments, list, cap)) : null;
       const firstIn = list.find((x) => x.type === 'In')!;
       const last = list.at(-1)!;
       return {
         date,
         firstIn: Math.round((new Date(firstIn.time).getTime() - dayStart) / 60e3),
         lastOut: last.type === 'Out' ? Math.round((new Date(last.time).getTime() - dayStart) / 60e3) : null,
-        worked: Math.round(worked),
-        breaks: Math.round(breaks),
-        clickup: useCu ? Math.round(cuDay.get(`${cu!.id}|${date}`) || 0) : null,
+        worked: Math.round(segments.filter((x) => x.kind === 'work').reduce((t, x) => t + len(x), 0)),
+        breaks: Math.round(segments.filter((x) => x.kind === 'break').reduce((t, x) => t + len(x), 0)),
+        clickup: cuDay ? cuDay.trackedMin : null,
+        clickupOffClock: cuDay ? cuDay.removedMin : null,
+        offClock: cuDay ? cuDay.offClock : [],
+        segments,
+        activities: [...acts.values()].map((a) => ({ ...a, minutes: Math.round(a.minutes) })).filter((a) => a.minutes > 0).sort((a, b) => b.minutes - a.minutes),
+        tasks: cuDay ? cuDay.tasks.map(({ name, url, minutes }) => ({ name, url, minutes })) : [],
       };
     });
 
@@ -117,6 +120,14 @@ async function buildWeek(weekStart: string): Promise<WeekReport> {
     const totalWorked = sum((d) => d.worked);
     const totalBreak = sum((d) => d.breaks);
     const totalClickup = useCu ? sum((d) => d.clickup || 0) : null;
+    const merge = <T extends { minutes: number }>(items: T[], key: (x: T) => string) => {
+      const m = new Map<string, T>();
+      for (const x of items) {
+        const cur = m.get(key(x));
+        m.set(key(x), cur ? { ...cur, minutes: cur.minutes + x.minutes } : { ...x });
+      }
+      return [...m.values()].sort((a, b) => b.minutes - a.minutes);
+    };
     return {
       name: member.name,
       department: member.department,
@@ -133,8 +144,9 @@ async function buildWeek(weekStart: string): Promise<WeekReport> {
       daysOverBreak: present.filter((d) => d.breaks > CONFIG.breakAllowanceMin).length,
       totalClickup,
       avgClickup: totalClickup !== null && present.length ? Math.round(totalClickup / present.length) : null,
-      activities: [...acts.values()].map((a) => ({ ...a, minutes: Math.round(a.minutes) })).filter((a) => a.minutes > 0).sort((a, b) => b.minutes - a.minutes),
-      tasks: useCu ? [...(cuTasks.get(cu!.id)?.values() || [])].map((t) => ({ ...t, minutes: Math.round(t.minutes) })).sort((a, b) => b.minutes - a.minutes).slice(0, 10) : [],
+      totalClickupOffClock: useCu ? sum((d) => d.clickupOffClock || 0) : null,
+      activities: merge(present.flatMap((d) => d.activities), (a) => `${a.activity || ''}\u0000${a.project || ''}`),
+      tasks: useCu ? merge(present.flatMap((d) => d.tasks), (t) => t.name).slice(0, 10) : [],
     };
   });
 
@@ -160,19 +172,36 @@ const cell = (v: string | number) => {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
+const topActivity = (a: { activity: string | null; project: string | null } | undefined) =>
+  a ? `${a.activity || 'No activity'}${a.project ? ` (${a.project})` : ''}` : '';
+const csv = (rows: (string | number)[][]) => '\ufeff' + rows.map((r) => r.map(cell).join(',')).join('\n') + '\n'; // BOM so Excel reads UTF-8
+
 export function weekCsv(w: WeekReport) {
   const dayNames = w.dates.map((d) => new Date(d + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }));
   const head = [
     'Name', 'Department', 'Days in', 'Avg clock-in', 'Avg clock-out', 'Avg worked / day', 'Total worked', `Days ≥ ${hmm(w.settings.workTargetMin)}`,
-    'Avg break / day', 'Total break', `Days over ${hmm(w.settings.breakAllowanceMin)} break`, 'Avg ClickUp / day', 'Total ClickUp',
+    'Avg break / day', 'Total break', `Days over ${hmm(w.settings.breakAllowanceMin)} break`, 'Avg ClickUp / day', 'Total ClickUp', 'ClickUp removed (ran on break or after clock-out)',
     ...dayNames.map((d) => `Worked ${d}`), 'Top Jibble activity', 'Top ClickUp task',
   ];
-  const rows = w.people.map((p) => [
+  return csv([head, ...w.people.map((p) => [
     p.name, p.department, p.daysPresent, hmm(p.avgIn), hmm(p.avgOut), hmm(p.avgWorked), hmm(p.totalWorked), p.daysOnTarget,
-    hmm(p.avgBreak), hmm(p.totalBreak), p.daysOverBreak, hmm(p.avgClickup), hmm(p.totalClickup),
+    hmm(p.avgBreak), hmm(p.totalBreak), p.daysOverBreak, hmm(p.avgClickup), hmm(p.totalClickup), hmm(p.totalClickupOffClock),
     ...p.days.map((d) => (d ? hmm(d.worked) : '')),
-    p.activities[0] ? `${p.activities[0].activity || 'No activity'}${p.activities[0].project ? ` (${p.activities[0].project})` : ''}` : '',
-    p.tasks[0]?.name || '',
-  ]);
-  return '\ufeff' + [head, ...rows].map((r) => r.map(cell).join(',')).join('\n') + '\n'; // BOM so Excel reads UTF-8
+    topActivity(p.activities[0]), p.tasks[0]?.name || '',
+  ])]);
+}
+
+/** One row per person for a single day */
+export function dayCsv(w: WeekReport, date: string) {
+  const i = w.dates.indexOf(date);
+  const head = ['Date', 'Name', 'Department', 'Clock-in', 'Clock-out', 'Worked', 'Break', 'ClickUp', 'ClickUp removed (ran on break or after clock-out)', 'Jibble activities', 'ClickUp tasks'];
+  return csv([head, ...w.people.map((p) => {
+    const d = p.days[i];
+    if (!d) return [date, p.name, p.department, 'Not in', '', '', '', '', '', '', ''];
+    return [
+      date, p.name, p.department, hmm(d.firstIn), hmm(d.lastOut), hmm(d.worked), hmm(d.breaks), hmm(d.clickup), hmm(d.clickupOffClock),
+      d.activities.map((a) => `${topActivity(a)} ${hmm(a.minutes)}`).join('; '),
+      d.tasks.map((t) => `${t.name} ${hmm(t.minutes)}`).join('; '),
+    ];
+  })]);
 }

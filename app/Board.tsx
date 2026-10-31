@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BoardEvent, BoardState, PersonRow } from '@/lib/types';
-import { DEPT_COLORS, ago, dur, fm, hm, initials, mins } from './format';
+import { DEPT_COLORS, ago, dur, fm, hm, initials, mins, offLabel, reasonText } from './format';
 import PersonPanel from './PersonPanel';
 import WeekReport from './WeekReport';
+import DailyReport from './DailyReport';
 
 
 type Filter = 'all' | 'working' | 'pool' | 'break' | 'attention' | 'out';
@@ -119,13 +120,19 @@ export default function Board() {
       {actions || p.state === 'working' ? (
         <div className="acts">
           {actions}
-          {p.state === 'working' && (
+          {p.state === 'working' && (data.autoPool ? (
             <select value={p.mode} onChange={(e) => act({ action: 'mode', personId: p.id, mode: e.target.value })} title="Availability">
               <option value="auto">{data.clickup ? 'Auto (ClickUp timer)' : 'Auto'}</option>
               <option value="free">Free</option>
               <option value="busy">Busy</option>
             </select>
-          )}
+          ) : p.poolVia === 'clickup' ? (
+            <span className="hint" title="They're running a ClickUp timer on a “Pool” task. They leave the pool when they switch task or are assigned.">In pool via ClickUp timer</span>
+          ) : p.inPool ? (
+            <button className="btn sm" onClick={() => act({ action: 'mode', personId: p.id, mode: 'auto' })}>Remove from pool</button>
+          ) : !p.pick ? (
+            <button className="btn sm" onClick={() => act({ action: 'mode', personId: p.id, mode: 'free' })} title="Make them available to assign">＋ Add to pool</button>
+          ) : null)}
         </div>
       ) : null}
     </div>
@@ -147,12 +154,13 @@ export default function Board() {
       {p.day?.firstIn && <span>In <b>{hm(p.day.firstIn)}</b></span>}
       {p.day?.lastOut && <span>Out <b>{hm(p.day.lastOut)}</b></span>}
       {p.trackedTodayMin !== null && p.inToday && <span>ClickUp today <b>{fm(p.trackedTodayMin)}</b></span>}
+      {p.clickupOffClock && <span className="amber" title="ClickUp timer ran while on a Jibble break or after clock-out; removed from ClickUp time">−{fm(p.clickupOffClock.minutes)} {offLabel(p.clickupOffClock.spans)}</span>}
     </div>
   );
 
   const Warn = ({ p }: { p: PersonRow }) => (
     <>
-      {p.timerWhileOff && <div className="warn amber">⚠️ ClickUp timer still running while {p.state === 'break' ? 'on break' : 'clocked out'}</div>}
+      {p.timerWhileOff && <div className="warn amber">⚠️ ClickUp timer still running while {p.state === 'break' ? 'on break' : 'clocked out'} (this time is removed from their ClickUp hours)</div>}
       {p.state === 'working' && p.away && <div className="warn">⚠️ Blank screen {dur(p.away.since)} ({p.blankStreak} screenshots), no break logged</div>}
       {p.state === 'working' && !p.away && p.frozen && <div className="warn violet">⚠️ Screen frozen {dur(p.frozen.since)} ({p.frozen.shots} identical screenshots)</div>}
       {p.state === 'working' && !p.away && !p.frozen && p.noScreenshots && <div className="warn">⚠️ No screenshots for {fm(p.noScreenshots)} (tracker off?)</div>}
@@ -178,7 +186,7 @@ export default function Board() {
           <span className="clock">{new Date().toLocaleString([], { timeZone: data.timezone, weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
           <div className="tabs">
             <button className={tab === 'live' ? 'on' : ''} onClick={() => { setTab('live'); remember('tab', 'live'); }}>Live board</button>
-            <button className={tab === 'day' ? 'on' : ''} onClick={() => { setTab('day'); remember('tab', 'day'); }}>Today’s report</button>
+            <button className={tab === 'day' ? 'on' : ''} onClick={() => { setTab('day'); remember('tab', 'day'); }}>Daily</button>
             <button className={tab === 'week' ? 'on' : ''} onClick={() => { setTab('week'); remember('tab', 'week'); }}>Weekly</button>
           </div>
           <div className="grow" />
@@ -223,12 +231,12 @@ export default function Board() {
             {tab === 'week' ? (
               <WeekReport dept={dept} deptColor={deptColor} />
             ) : tab === 'day' ? (
-              <DayReport people={P} data={data} deptColor={deptColor} onOpen={setOpenId} />
+              <DailyReport dept={dept} deptColor={deptColor} timezone={data.timezone} today={<DayReport people={P} data={data} deptColor={deptColor} onOpen={setOpenId} />} />
             ) : (
               <>
                 {show('pool') && (
                   <div className="panel hl">
-                    <div className="ph"><h2>🟦 Pool — free to assign</h2><span className="count">{pool.length}</span><span className="hint">Clocked in on Jibble · no ClickUp timer running</span></div>
+                    <div className="ph"><h2>🟦 Pool — free to assign</h2><span className="count">{pool.length}</span><span className="hint">{data.autoPool ? 'Clocked in on Jibble · no ClickUp timer running' : 'Added by hand (“＋ Add to pool”), or running a ClickUp timer on a “Pool” task'}</span></div>
                     <div className="lanes">
                       {(dept === 'All' ? data.departments : [dept]).map((d) => {
                         const list = pool.filter((p) => p.department === d).sort((a, b) => mins(b.poolSince) - mins(a.poolSince));
@@ -347,7 +355,7 @@ function DayReport({ people, data, deptColor, onOpen }: { people: PersonRow[]; d
 
   return (
     <div className="panel">
-      <div className="ph"><h2>Today’s report</h2><span className="count">{rows.length} in today</span>{notIn.length ? <span className="hint">Not in today: {notIn.map((p) => p.name).join(', ')}</span> : null}</div>
+      <div className="ph"><h2>Today</h2><span className="count">{rows.length} in today</span>{notIn.length ? <span className="hint">Not in today: {notIn.map((p) => p.name).join(', ')}</span> : null}</div>
       <div className="flags" style={{ marginBottom: 12 }}>
         {data.screenshots && <span className="flag" style={{ ['--c' as string]: 'var(--alert)' }}>Forgot to log a break: {forgot.length}</span>}
         <span className="flag" style={{ ['--c' as string]: 'var(--break)' }}>Over {fm(S.breakAllowanceMin)} break: {over.length}</span>
@@ -355,6 +363,7 @@ function DayReport({ people, data, deptColor, onOpen }: { people: PersonRow[]; d
       <div className="legend">
         <span><i style={{ background: 'var(--work)', opacity: 0.75 }} />Working</span>
         <span><i style={{ background: 'var(--break)' }} />Break (logged)</span>
+        {data.clickup && <span><i className="cubreak-key" />ClickUp timer on break or after clock-out (removed)</span>}
         {data.screenshots && <>
           <span><i style={{ background: 'var(--alert)' }} />Blank screen, no break logged</span>
           <span><i style={{ background: 'var(--picked)' }} />Frozen screen</span>
@@ -382,6 +391,7 @@ function DayReport({ people, data, deptColor, onOpen }: { people: PersonRow[]; d
             <div className="bar">
               {d.segments.map((x, i) => span(x, x.kind, `${x.kind === 'work' ? 'Working' : 'Break'} ${hm(x.from)}–${hm(x.to)}`, `s${i}`))}
               {d.overlays.map((x, i) => span(x, x.kind, x.kind === 'away' ? `Blank screen ${hm(x.from)}–${hm(x.to)}, no break logged` : x.kind === 'frozen' ? `Frozen screen ${hm(x.from)}–${hm(x.to)}` : `No screenshots ${hm(x.from)}–${hm(x.to)}`, `o${i}`))}
+              {p.clickupOffClock?.spans.map((x, i) => span(x, 'cubreak', `ClickUp timer on “${x.task}” ran ${hm(x.from)}–${hm(x.to)} ${reasonText(x.reason)} (removed)`, `c${i}`))}
             </div>
             <div className="axis">{ticks.map((t) => <span key={t} style={{ left: `${((t - start) / (end - start)) * 100}%` }}>{new Date(t).toLocaleTimeString([], { hour: 'numeric' })}</span>)}</div>
             <div className="flags">
@@ -389,6 +399,7 @@ function DayReport({ people, data, deptColor, onOpen }: { people: PersonRow[]; d
               {d.frozen > 0 && <span className="flag" style={{ ['--c' as string]: 'var(--picked)' }}>Screen frozen {fm(d.frozen)}: check</span>}
               {d.overBreak > 0 && <span className="flag" style={{ ['--c' as string]: 'var(--break)' }}>Over break by {fm(d.overBreak)}</span>}
               {p.trackedTodayMin !== null && d.realWorked - p.trackedTodayMin > 60 && <span className="flag" style={{ ['--c' as string]: 'var(--break)' }}>{fm(d.realWorked - p.trackedTodayMin)} clocked in without a ClickUp timer</span>}
+              {p.clickupOffClock && <span className="flag" style={{ ['--c' as string]: 'var(--alert)' }} title={p.clickupOffClock.spans.map((x) => `${x.task}: ${hm(x.from)}–${hm(x.to)} ${reasonText(x.reason)}`).join('\n')}>ClickUp ran {fm(p.clickupOffClock.minutes)} {offLabel(p.clickupOffClock.spans)} (removed)</span>}
               {p.state === 'break' && <span className="flag" style={{ ['--c' as string]: 'var(--break)' }}>On break now</span>}
             </div>
           </div>

@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import type { BoardState, PersonRow } from '@/lib/types';
-import { dur, fm, hm, initials } from './format';
+import { dur, fm, hm, initials, offLabel, reasonText } from './format';
 
 const STATE = { working: ['Working', 'work'], break: ['On break', 'break'], out: ['Offline', 'out'] } as const;
 
@@ -47,7 +47,7 @@ export default function PersonPanel({ p, data, color, onClose }: { p: PersonRow;
               <div><span>Clock-in</span><b>{d.firstIn ? hm(d.firstIn) : '–'}</b>{d.lastOut && <small>out {hm(d.lastOut)}</small>}</div>
               <div><span>Worked</span><b>{fm(d.realWorked)}</b><small>of {fm(S.workTargetMin)}</small></div>
               <div className={d.overBreak ? 'amber' : ''}><span>Breaks</span><b>{fm(d.totalBreak)}</b><small>of {fm(S.breakAllowanceMin)}</small></div>
-              {p.trackedTodayMin !== null && <div><span>ClickUp</span><b>{fm(p.trackedTodayMin)}</b><small>tracked</small></div>}
+              {p.trackedTodayMin !== null && <div><span>ClickUp</span><b>{fm(p.trackedTodayMin)}</b><small className={p.clickupOffClock ? 'bad' : ''}>{p.clickupOffClock ? `−${fm(p.clickupOffClock.minutes)} ${offLabel(p.clickupOffClock.spans)}` : 'tracked'}</small></div>}
             </div>
 
             <div className="bar">
@@ -92,6 +92,9 @@ export default function PersonPanel({ p, data, color, onClose }: { p: PersonRow;
                     ))}
                   </div>
                 ) : <div className="empty">No ClickUp time tracked today.</div>}
+                {p.clickupOffClock && <div className="removed">{p.clickupOffClock.spans.map((x, i) => (
+                  <div key={i}>Removed {fm(x.minutes)}: “{x.task}” ran {hm(x.from)}–{hm(x.to)} {reasonText(x.reason)}</div>
+                ))}</div>}
               </>
             )}
           </>

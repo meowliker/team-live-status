@@ -16,3 +16,10 @@ export const DEPT_COLORS = [
   'linear-gradient(135deg,#a3e635,#10b981)',
   'linear-gradient(135deg,#94a3b8,#64748b)',
 ];
+
+// Why ClickUp time was removed: it ran during a Jibble break, or after clock-out
+type Off = { reason: 'break' | 'out' };
+export const reasonText = (r: Off['reason']) => (r === 'break' ? 'during a break' : 'after clock-out');
+export const offLabel = (spans: Off[]) =>
+  spans.length && spans.every((x) => x.reason === 'break') ? 'on break' : spans.length && spans.every((x) => x.reason === 'out') ? 'after clock-out' : 'off the clock';
+

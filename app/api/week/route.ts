@@ -1,10 +1,10 @@
-import { getWeek, weekCsv } from '@/lib/week';
+import { dayCsv, getWeek, weekCsv } from '@/lib/week';
 import { mondayOf, todayStr } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-// GET /api/week?start=YYYY-MM-DD (any day of the week; defaults to this week) &format=csv &fresh=1
+// GET /api/week?start=YYYY-MM-DD (any day of the week; defaults to this week) &format=csv [&day=YYYY-MM-DD for one day] &fresh=1
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const start = url.searchParams.get('start');
@@ -14,8 +14,10 @@ export async function GET(req: Request) {
   try {
     const data = await getWeek(week, url.searchParams.get('fresh') === '1');
     if (url.searchParams.get('format') === 'csv') {
-      return new Response(weekCsv(data), {
-        headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="team-week-${week}.csv"`, 'Cache-Control': 'no-store' },
+      const day = url.searchParams.get('day');
+      const one = day && data.dates.includes(day) ? day : null;
+      return new Response(one ? dayCsv(data, one) : weekCsv(data), {
+        headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${one ? `team-day-${one}` : `team-week-${week}`}.csv"`, 'Cache-Control': 'no-store' },
       });
     }
     return Response.json(data, { headers: { 'Cache-Control': 'no-store' } });

@@ -12,7 +12,11 @@ export type Shot = { id: string; personId: string; time: string; blank: boolean;
 export type ClickupMember = { id: number; email: string | null; username: string | null };
 export type Timer = { task: string; url: string | null; status: string | null; startedAt: string };
 export type TaskTime = { name: string; url: string | null; minutes: number; running: boolean };
-export type TimerInfo = { running: Timer | null; trackedTodayMin: number; tasks?: TaskTime[] };
+/** One stretch of ClickUp timer time (ms since epoch) */
+export type ClickupSpan = { from: number; to: number; task: string; url: string | null };
+/** ClickUp timer time that ran while off the clock in Jibble: on a break or after clock-out (removed from ClickUp hours) */
+export type OffClockSpan = { task: string; from: string; to: string; minutes: number; reason: 'break' | 'out' };
+export type TimerInfo = { running: Timer | null; trackedTodayMin: number; tasks?: TaskTime[]; entries?: ClickupSpan[] };
 
 export type Segment = { kind: 'work' | 'break'; from: string; to: string; activity?: string | null; project?: string | null };
 /** Time on one Jibble activity + project today */
@@ -45,12 +49,14 @@ export type PersonRow = {
   mode: 'auto' | 'free' | 'busy';
   pick: { by: string; at: string } | null;
   inPool: boolean;
+  poolVia: 'hand' | 'clickup' | 'auto' | null; // added by someone, ClickUp timer on a "pool" task, or AUTO_POOL
   poolSince: string | null;
   clickupLinked: boolean;
   jibbleOnly: boolean;
   timer: Timer | null;
   trackedTodayMin: number | null;
   clickupTasks: TaskTime[] | null;
+  clickupOffClock: { minutes: number; spans: OffClockSpan[] } | null;
   timerWhileOff: boolean;
   away: { since: string; minutes: number } | null;
   frozen: { since: string; minutes: number; shots: number } | null;
@@ -69,6 +75,7 @@ export type BoardState = {
   clickup: boolean;
   screenshots: boolean;
   timezone: string;
+  autoPool: boolean;
   settings: { awayMin: number; frozenMin: number; breakAllowanceMin: number; workTargetMin: number; longBreakMin: number; poolIdleAlertMin: number };
   departments: string[];
   people: PersonRow[];
@@ -95,7 +102,19 @@ export type SettingsState = {
 };
 
 /** One person's day inside the weekly report. Times of day are minutes after midnight (team timezone). */
-export type WeekDay = { date: string; firstIn: number | null; lastOut: number | null; worked: number; breaks: number; clickup: number | null };
+export type WeekDay = {
+  date: string;
+  firstIn: number | null;
+  lastOut: number | null;
+  worked: number;
+  breaks: number;
+  clickup: number | null; // ClickUp time, minus anything that ran during a break
+  clickupOffClock: number | null; // ClickUp time removed because it ran during a break
+  offClock: OffClockSpan[];
+  segments: Segment[];
+  activities: { activity: string | null; project: string | null; minutes: number }[];
+  tasks: { name: string; url: string | null; minutes: number }[];
+};
 
 export type PersonWeek = {
   name: string;
@@ -113,6 +132,7 @@ export type PersonWeek = {
   daysOverBreak: number;
   totalClickup: number | null;
   avgClickup: number | null;
+  totalClickupOffClock: number | null;
   activities: { activity: string | null; project: string | null; minutes: number }[];
   tasks: { name: string; url: string | null; minutes: number }[];
 };
