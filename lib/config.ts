@@ -27,6 +27,14 @@ export const CONFIG = {
   autoPool: on(process.env.AUTO_POOL, false),
   // A running ClickUp timer on a task whose name contains this word puts the person in the pool (empty = off)
   poolTaskWord: (process.env.POOL_TASK_WORD ?? 'pool').trim(),
+
+  // Slack messages for "Needs attention" (off until a bot token is set)
+  slackToken: process.env.SLACK_BOT_TOKEN || '',
+  slackRemindMin: num(process.env.SLACK_REMIND_MINUTES, 10),
+  // Where to post when someone joins the pool (channel name or id; the bot must be in it). Empty = off
+  slackPoolChannel: (process.env.SLACK_POOL_CHANNEL ?? '#creatives').trim(),
+  // Log the messages instead of sending them (always on in demo mode)
+  slackDryRun: on(process.env.SLACK_DRY_RUN, false) || on(process.env.MOCK, false),
 };
 
 export const clickupOn = () => CONFIG.mock || !!(CONFIG.clickupToken && CONFIG.clickupTeamId);

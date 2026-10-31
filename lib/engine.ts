@@ -7,6 +7,7 @@ import * as clickup from './clickup';
 import * as mock from './mock';
 import { startOfToday, todayStr } from './time';
 import { offClockSpans, removeOffClockTime } from './overlap';
+import { SlackAlerts } from './alerts';
 import type { ActivityTime, BoardEvent, BoardState, ClickupMember, DayReport, JibbleEntry, JibblePerson, Mapping, Overlay, PersonRow, Segment, SettingsState, Shot, TimerInfo } from './types';
 
 const norm = (n: string | null | undefined) => (n || '').toLowerCase().replace(/[^a-z0-9@. ]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -98,6 +99,7 @@ function frozenRuns(list: Shot[], segEnd: string): Overlay[] {
 class Engine {
   pool: Pool = readJson<Pool>('pool.json', { modes: {}, picks: {} });
   mapping: Mapping = readJson<Mapping>('mapping.json', {});
+  alerts = new SlackAlerts(() => readJson('alerts.json', null), (s) => writeJson('alerts.json', s));
   jibblePeople: JibblePerson[] = [];
   clickupMembers: ClickupMember[] = [];
   links = new Map<string, { person: JibblePerson; cu: ClickupMember | null }>();
@@ -376,6 +378,14 @@ class Engine {
         return row;
       });
       this.prev = next;
+
+      // Slack messages for "Needs attention" (only once SLACK_BOT_TOKEN is set)
+      const emails = new Map(matched.map(({ member, person }) => [person.id, member.slack || person.email]));
+      try {
+        notices.push(...(await this.alerts.run(this.people, emails, (name, text) => this.pushEvent(name, text, 'alert'))));
+      } catch (e) {
+        errors.push((e as Error).message);
+      }
       this.updatedAt = nowIso;
     } catch (e) {
       errors.push((e as Error).message);

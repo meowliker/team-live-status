@@ -13,6 +13,7 @@ One link that shows your team live:
 - **ClickUp timers off the clock**: if someone's ClickUp timer keeps running while they are on a Jibble break or after they clock out, that time is taken off their ClickUp hours everywhere (board, daily, weekly, CSV) and flagged, with the task, times and reason.
 - **Click anyone's name** to see their day: clock-in, worked time, breaks, a timeline, time per Jibble activity/project (the activity picked at clock-in) and time per ClickUp task.
 - **Weekly**: pick any week (this week, last week, or step back) to see each person's days in, average clock-in and clock-out, average worked time and days on target, average breaks and days over the allowance, ClickUp time per day and coverage, a bar per day, and their Jibble activities and top ClickUp tasks. **Download CSV** for a spreadsheet, or **Print**. Built from Jibble and ClickUp history, so past weeks work too.
+- **Slack** (optional): when someone lands in *Needs attention* they get a Slack DM saying what's wrong and how to fix it; if it isn't fixed after 10 minutes they get a reminder and the managers in `team.config.ts` (`SLACK_MANAGERS`) are told; when it clears, "✅ Sorted" is posted in the same threads. When someone joins the pool, it's posted in `#creatives`, tagging the Creative Strategists and Media Buyers, with "✅ Assigned by …" in the thread. Set it up: see *Slack setup* below.
 - Live feed, browser alerts, department filters, light and dark mode. Works on phones.
 
 ## Team list
@@ -46,6 +47,15 @@ npm run mock          # demo with fake data → http://localhost:3000
 cp .env.example .env  # fill in the keys
 npm run build && npm start
 ```
+
+## Slack setup
+1. Go to **api.slack.com/apps** → **Create New App** → **From scratch**, name it "Team Live", pick your workspace.
+2. **OAuth & Permissions** → **Bot Token Scopes**: add `chat:write`, `im:write`, `users:read`, `users:read.email`.
+3. **Install to Workspace**, then copy the **Bot User OAuth Token** (`xoxb-…`).
+4. In Railway → **Variables**, add `SLACK_BOT_TOKEN` with that token (and `SLACK_POOL_CHANNEL` if the channel isn't `#creatives`).
+5. In Slack, open the creatives channel and type `/invite @Team Live`.
+
+People are found in Slack by their Jibble email. If someone's Slack email is different, add `slack: 'their@email'` to their line in `team.config.ts`. The board shows a yellow note for anyone it can't find.
 
 ## Notes
 - It runs as an always-on server: it keeps polling in the background and saves picks to `.data/`. Host it somewhere that stays on (Railway, Render paid, a VPS, or an office PC), not Vercel's free serverless.

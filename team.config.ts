@@ -4,9 +4,10 @@
 //  (case doesn't matter). If someone's Jibble name is different,
 //  add it in `aliases` (e.g. their full name or email in Jibble).
 //  `clickup: false` = track Jibble only (no ClickUp timer checks).
+//  `slack: 'email'` = their Slack email, if it isn't the same as in Jibble.
 // ─────────────────────────────────────────────────────────────
 
-export type Member = { name: string; department: string; aliases?: string[]; clickup?: false };
+export type Member = { name: string; department: string; aliases?: string[]; clickup?: false; slack?: string };
 
 export const TEAM: Member[] = [
   { name: 'Nitin', department: 'Creative Strategist', aliases: ['nitin@gividreams.com'] },
@@ -42,6 +43,12 @@ export const TEAM: Member[] = [
 
   { name: 'Santushti', department: 'HR', clickup: false, aliases: ['santushti@gividreams.com'] },
 ];
+
+// Told on Slack when someone's "Needs attention" problem isn't fixed after a reminder (team list names)
+export const SLACK_MANAGERS = ['Apurwa'];
+
+// Tagged in the pool channel when someone becomes free, so they can assign them a task
+export const SLACK_POOL_TAG_DEPARTMENTS = ['Creative Strategist', 'Media Buyer'];
 
 // Order of department lanes on the board
 export const DEPARTMENTS = ['Creative Strategist', 'Media Buyer', 'Editor', 'Graphic Designer', 'Website Designer', 'Email Marketing', 'Finance', 'HR', 'Other'];
