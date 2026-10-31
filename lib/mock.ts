@@ -68,18 +68,19 @@ export const getMembers = async (): Promise<ClickupMember[]> => people.map((p, i
 export async function getTimers(): Promise<Map<number, TimerInfo>> {
   const map = new Map<number, TimerInfo>();
   people.forEach((_, i) => {
-    const running = scenario[i][3];
+    const [state, since] = scenario[i];
+    const pool = i === 6; // waiting for work: timer on a "Pool" task
+    const running = scenario[i][3] || pool;
+    const task = pool ? 'Pool' : tasks[i % tasks.length];
     map.set(1000 + i, {
       trackedTodayMin: 60 + ((i * 37) % 240),
-      tasks: [
-        { name: tasks[i % tasks.length], url: 'https://app.clickup.com', minutes: 40 + ((i * 37) % 120), running },
-        { name: tasks[(i + 3) % tasks.length], url: 'https://app.clickup.com', minutes: 20 + ((i * 17) % 80), running: false },
-      ],
-      running: running ? { task: tasks[i % tasks.length], url: 'https://app.clickup.com', status: 'in progress', startedAt: min(10 + ((i * 13) % 80)) } : null,
-      // A running timer started before their last break, so part of it overlaps the break
+      running: running ? { task, url: 'https://app.clickup.com', status: 'in progress', startedAt: min(pool ? 12 : 10 + ((i * 13) % 80)) } : null,
       entries: [
-        { from: ms(scenario[i][1] + 200), to: ms(scenario[i][1] + 170), task: tasks[(i + 3) % tasks.length], url: 'https://app.clickup.com' },
-        ...(running ? [{ from: ms(scenario[i][1] + 60), to: Date.now(), task: tasks[i % tasks.length], url: 'https://app.clickup.com' }] : []),
+        { from: ms(since + 200), to: ms(since + 170), task: tasks[(i + 3) % tasks.length], url: 'https://app.clickup.com' },
+        // a running timer started before their last break, so part of it overlaps the break
+        ...(running ? [{ from: ms(pool ? 12 : since + 60), to: Date.now(), task, url: 'https://app.clickup.com' }] : []),
+        // clocked out but left the timer on for another 25 minutes
+        ...(state === 'Out' ? [{ from: ms(since + 20), to: ms(since - 25), task: tasks[(i + 1) % tasks.length], url: 'https://app.clickup.com' }] : []),
       ],
     });
   });
@@ -135,8 +136,8 @@ export async function getClickupEntriesBetween(startMs: number, endMs: number): 
     people.forEach((_, i) => {
       if (!workDay(i, date)) return;
       const [t0, t1, t2, t3] = dayPlan(i, date);
-      // every third person forgets to stop their timer for the break
-      [[t0 + 10 * 60e3, t1 + (i % 3 === 0 ? 20 : -5) * 60e3], [t2 + 5 * 60e3, t3 - (20 + rnd(i, date, 'gap') * 60) * 60e3]].forEach(([a, b], k) => {
+      // every third person forgets to stop their timer for the break; some leave it running after clock-out
+      [[t0 + 10 * 60e3, t1 + (i % 3 === 0 ? 20 : -5) * 60e3], [t2 + 5 * 60e3, i % 4 === 1 ? t3 + 30 * 60e3 : t3 - (20 + rnd(i, date, 'gap') * 60) * 60e3]].forEach(([a, b], k) => {
         const name = tasks[(i + k + Math.floor(rnd(i, date, 't') * 4)) % tasks.length];
         out.push({ id: `${i}-${date}-${k}`, user: { id: 1000 + i }, start: String(a), end: String(b), duration: String(b - a), task: { id: `t${name.length}`, name } });
       });

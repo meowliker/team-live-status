@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { WeekDay, WeekReport as Week } from '@/lib/types';
-import { DEPT_COLORS, fm, hm, initials } from './format';
+import { DEPT_COLORS, fm, hm, initials, offLabel, reasonText } from './format';
 
 const shift = (d: string, n: number) => new Date(Date.parse(d + 'T12:00:00Z') + n * 86400e3).toISOString().slice(0, 10);
 const label = (d: string) => new Date(d + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
@@ -58,7 +58,7 @@ function PastDay({ date, dept, deptColor }: { date: string; dept: string; deptCo
   const i = data.dates.indexOf(date);
   const people = data.people.filter((p) => dept === 'All' || p.department === dept);
   const rows = people.filter((p) => p.days[i]).map((p) => ({ p, d: p.days[i] as WeekDay }))
-    .sort((a, b) => (b.d.clickupOnBreak || 0) - (a.d.clickupOnBreak || 0) || b.d.breaks - a.d.breaks);
+    .sort((a, b) => (b.d.clickupOffClock || 0) - (a.d.clickupOffClock || 0) || b.d.breaks - a.d.breaks);
   const notIn = people.filter((p) => !p.days[i]);
   if (!rows.length) return <div className="panel"><div className="empty">Nobody clocked in on this day.</div></div>;
 
@@ -72,7 +72,7 @@ function PastDay({ date, dept, deptColor }: { date: string; dept: string; deptCo
     <span key={k} className={cls} title={title} style={{ left: `${pct(x.from)}%`, width: `${Math.max(0.3, pct(x.to) - pct(x.from))}%` }} />
   );
   const overBreak = rows.filter(({ d }) => d.breaks > S.breakAllowanceMin).length;
-  const cuBreak = rows.filter(({ d }) => d.clickupOnBreak).length;
+  const cuBreak = rows.filter(({ d }) => d.clickupOffClock).length;
 
   return (
     <div className="panel">
@@ -80,12 +80,12 @@ function PastDay({ date, dept, deptColor }: { date: string; dept: string; deptCo
       {data.errors.map((e) => <div key={e} className="banner err">⚠️ {e}</div>)}
       <div className="flags" style={{ marginBottom: 12 }}>
         <span className="flag" style={{ ['--c' as string]: 'var(--break)' }}>Over {fm(S.breakAllowanceMin)} break: {overBreak}</span>
-        {data.clickup && <span className="flag" style={{ ['--c' as string]: 'var(--alert)' }}>ClickUp timer during break: {cuBreak}</span>}
+        {data.clickup && <span className="flag" style={{ ['--c' as string]: 'var(--alert)' }}>ClickUp off the clock: {cuBreak}</span>}
       </div>
       <div className="legend">
         <span><i style={{ background: 'var(--work)', opacity: 0.75 }} />Working</span>
         <span><i style={{ background: 'var(--break)' }} />Break</span>
-        {data.clickup && <span><i className="cubreak-key" />ClickUp timer during break (removed)</span>}
+        {data.clickup && <span><i className="cubreak-key" />ClickUp timer on break or after clock-out (removed)</span>}
         <span>Click a name for their Jibble activities and ClickUp tasks</span>
       </div>
       {rows.map(({ p, d }) => {
@@ -99,17 +99,17 @@ function PastDay({ date, dept, deptColor }: { date: string; dept: string; deptCo
               </div>
               <span className="num">In <b>{hm(d.segments[0].from)}</b>{d.lastOut !== null ? <> · Out <b>{hm(d.segments.at(-1)!.to)}</b></> : <> · <b className="muted">no clock-out</b></>}</span>
               <span className={`num ${d.worked < S.workTargetMin ? 'amber' : ''}`}>Worked <b>{fm(d.worked)}</b> / {fm(S.workTargetMin)}</span>
-              {d.clickup !== null && <span className={`num ${d.worked - d.clickup > 60 ? 'amber' : ''}`}>ClickUp <b>{fm(d.clickup)}</b>{d.clickupOnBreak ? <small className="bad"> −{fm(d.clickupOnBreak)} on break</small> : null}</span>}
+              {d.clickup !== null && <span className={`num ${d.worked - d.clickup > 60 ? 'amber' : ''}`}>ClickUp <b>{fm(d.clickup)}</b>{d.clickupOffClock ? <small className="bad"> −{fm(d.clickupOffClock)} {offLabel(d.offClock)}</small> : null}</span>}
               <span className={`num ${d.breaks > S.breakAllowanceMin ? 'amber' : ''}`}>Break <b>{fm(d.breaks)}</b> / {fm(S.breakAllowanceMin)}</span>
             </div>
             <div className="bar">
               {d.segments.map((x, k) => span(x, x.kind, `${x.kind === 'work' ? x.activity || 'Working' : 'Break'} ${hm(x.from)}–${hm(x.to)}`, `s${k}`))}
-              {d.onBreak.map((x, k) => span(x, 'cubreak', `ClickUp timer on “${x.task}” ran ${hm(x.from)}–${hm(x.to)} during a break (removed)`, `c${k}`))}
+              {d.offClock.map((x, k) => span(x, 'cubreak', `ClickUp timer on “${x.task}” ran ${hm(x.from)}–${hm(x.to)} ${reasonText(x.reason)} (removed)`, `c${k}`))}
             </div>
             <div className="axis">{ticks.map((x) => <span key={x} style={{ left: `${((x - start) / (end - start)) * 100}%` }}>{new Date(x).toLocaleTimeString([], { hour: 'numeric' })}</span>)}</div>
             <div className="flags">
               {d.breaks > S.breakAllowanceMin && <span className="flag" style={{ ['--c' as string]: 'var(--break)' }}>Over break by {fm(d.breaks - S.breakAllowanceMin)}</span>}
-              {d.clickupOnBreak ? <span className="flag" style={{ ['--c' as string]: 'var(--alert)' }}>ClickUp ran {fm(d.clickupOnBreak)} during break (removed)</span> : null}
+              {d.clickupOffClock ? <span className="flag" style={{ ['--c' as string]: 'var(--alert)' }}>ClickUp ran {fm(d.clickupOffClock)} {offLabel(d.offClock)} (removed)</span> : null}
               {d.clickup !== null && d.worked - d.clickup > 60 && <span className="flag" style={{ ['--c' as string]: 'var(--break)' }}>{fm(d.worked - d.clickup)} clocked in without a ClickUp timer</span>}
             </div>
             {isOpen && (
@@ -134,8 +134,8 @@ function PastDay({ date, dept, deptColor }: { date: string; dept: string; deptCo
                         <b className="tmin">{fm(x.minutes)}</b>
                       </div>
                     ))}</div> : <div className="empty">No ClickUp time.</div>}
-                    {d.onBreak.length > 0 && <div className="removed">{d.onBreak.map((x, k) => (
-                      <div key={k}>Removed {fm(x.minutes)}: “{x.task}” ran {hm(x.from)}–{hm(x.to)} during a break</div>
+                    {d.offClock.length > 0 && <div className="removed">{d.offClock.map((x, k) => (
+                      <div key={k}>Removed {fm(x.minutes)}: “{x.task}” ran {hm(x.from)}–{hm(x.to)} {reasonText(x.reason)}</div>
                     ))}</div>}
                   </div>
                 )}

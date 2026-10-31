@@ -5,12 +5,12 @@
 One link that shows your team live:
 
 - **Working now**: who is clocked in on Jibble, and the **task their ClickUp timer is running on** (with how long it has been running).
-- **Pool**: people someone has added by hand with **＋ Add to pool** (on anyone who is working). Split by department, with **Assign** and **Remove from pool** buttons. Flags anyone idle in the pool for 15+ minutes. Set `AUTO_POOL=on` to go back to adding everyone clocked in with no ClickUp timer automatically.
+- **Pool**: people someone has added by hand with **＋ Add to pool** (on anyone who is working), and anyone running a ClickUp timer on a task named **Pool** (any task name starting with "Pool"; change the word with `POOL_TASK_WORD`). Split by department, with **Assign** and **Remove from pool** buttons. Flags anyone idle in the pool for 15+ minutes. Set `AUTO_POOL=on` to go back to adding everyone clocked in with no ClickUp timer automatically.
 - **On break**: from Jibble, with long-break warnings.
 - **Needs attention**: blank or frozen screens (from Jibble screenshots), or a ClickUp timer left running during a break or after clock-out.
 - **Offline**: clocked out (with the time) or not in today.
 - **Daily**: any day's report (Today, Yesterday, ‹ › or pick a date): clock-in, clock-out, worked time vs 7h, ClickUp tracked time, breaks vs 1h 30m, a colour timeline, and each person's Jibble activities and ClickUp tasks. **Download CSV** for that day.
-- **ClickUp timers during breaks**: if someone's ClickUp timer keeps running while they are on a Jibble break, that time is taken off their ClickUp hours everywhere (board, daily, weekly, CSV) and flagged, with the task and times.
+- **ClickUp timers off the clock**: if someone's ClickUp timer keeps running while they are on a Jibble break or after they clock out, that time is taken off their ClickUp hours everywhere (board, daily, weekly, CSV) and flagged, with the task, times and reason.
 - **Click anyone's name** to see their day: clock-in, worked time, breaks, a timeline, time per Jibble activity/project (the activity picked at clock-in) and time per ClickUp task.
 - **Weekly**: pick any week (this week, last week, or step back) to see each person's days in, average clock-in and clock-out, average worked time and days on target, average breaks and days over the allowance, ClickUp time per day and coverage, a bar per day, and their Jibble activities and top ClickUp tasks. **Download CSV** for a spreadsheet, or **Print**. Built from Jibble and ClickUp history, so past weeks work too.
 - Live feed, browser alerts, department filters, light and dark mode. Works on phones.

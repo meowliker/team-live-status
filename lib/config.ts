@@ -25,6 +25,8 @@ export const CONFIG = {
   poolIdleAlertMin: num(process.env.POOL_IDLE_ALERT_MINUTES, 15),
   // off = people join the pool only when someone adds them; on = anyone clocked in without a ClickUp timer
   autoPool: on(process.env.AUTO_POOL, false),
+  // A running ClickUp timer on a task whose name contains this word puts the person in the pool (empty = off)
+  poolTaskWord: (process.env.POOL_TASK_WORD ?? 'pool').trim(),
 };
 
 export const clickupOn = () => CONFIG.mock || !!(CONFIG.clickupToken && CONFIG.clickupTeamId);

@@ -5,7 +5,7 @@ import * as clickup from './clickup';
 import * as mock from './mock';
 import { addDays, mondayOf, startOfDay, todayStr } from './time';
 import type { ClickupSpan, JibbleEntry, PersonWeek, Segment, WeekDay, WeekReport } from './types';
-import { removeBreakTime } from './overlap';
+import { offClockSpans, removeOffClockTime } from './overlap';
 
 // Past weeks don't change, so keep them for an hour; the current week for 5 minutes
 const cache = new Map<string, { at: number; ttl: number; data: Promise<WeekReport> }>();
@@ -97,8 +97,7 @@ async function buildWeek(weekStart: string): Promise<WeekReport> {
         cur.minutes += len(x);
         acts.set(key, cur);
       }
-      const breakSpans = segments.filter((x) => x.kind === 'break').map((x) => ({ from: new Date(x.from).getTime(), to: new Date(x.to).getTime() }));
-      const cuDay = useCu ? removeBreakTime(cuSpans.get(`${cu!.id}|${date}`) || [], breakSpans) : null;
+      const cuDay = useCu ? removeOffClockTime(cuSpans.get(`${cu!.id}|${date}`) || [], offClockSpans(segments, list, cap)) : null;
       const firstIn = list.find((x) => x.type === 'In')!;
       const last = list.at(-1)!;
       return {
@@ -108,8 +107,8 @@ async function buildWeek(weekStart: string): Promise<WeekReport> {
         worked: Math.round(segments.filter((x) => x.kind === 'work').reduce((t, x) => t + len(x), 0)),
         breaks: Math.round(segments.filter((x) => x.kind === 'break').reduce((t, x) => t + len(x), 0)),
         clickup: cuDay ? cuDay.trackedMin : null,
-        clickupOnBreak: cuDay ? cuDay.removedMin : null,
-        onBreak: cuDay ? cuDay.onBreak : [],
+        clickupOffClock: cuDay ? cuDay.removedMin : null,
+        offClock: cuDay ? cuDay.offClock : [],
         segments,
         activities: [...acts.values()].map((a) => ({ ...a, minutes: Math.round(a.minutes) })).filter((a) => a.minutes > 0).sort((a, b) => b.minutes - a.minutes),
         tasks: cuDay ? cuDay.tasks.map(({ name, url, minutes }) => ({ name, url, minutes })) : [],
@@ -145,7 +144,7 @@ async function buildWeek(weekStart: string): Promise<WeekReport> {
       daysOverBreak: present.filter((d) => d.breaks > CONFIG.breakAllowanceMin).length,
       totalClickup,
       avgClickup: totalClickup !== null && present.length ? Math.round(totalClickup / present.length) : null,
-      totalClickupOnBreak: useCu ? sum((d) => d.clickupOnBreak || 0) : null,
+      totalClickupOffClock: useCu ? sum((d) => d.clickupOffClock || 0) : null,
       activities: merge(present.flatMap((d) => d.activities), (a) => `${a.activity || ''}\u0000${a.project || ''}`),
       tasks: useCu ? merge(present.flatMap((d) => d.tasks), (t) => t.name).slice(0, 10) : [],
     };
@@ -181,12 +180,12 @@ export function weekCsv(w: WeekReport) {
   const dayNames = w.dates.map((d) => new Date(d + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }));
   const head = [
     'Name', 'Department', 'Days in', 'Avg clock-in', 'Avg clock-out', 'Avg worked / day', 'Total worked', `Days ≥ ${hmm(w.settings.workTargetMin)}`,
-    'Avg break / day', 'Total break', `Days over ${hmm(w.settings.breakAllowanceMin)} break`, 'Avg ClickUp / day', 'Total ClickUp', 'ClickUp removed (ran during break)',
+    'Avg break / day', 'Total break', `Days over ${hmm(w.settings.breakAllowanceMin)} break`, 'Avg ClickUp / day', 'Total ClickUp', 'ClickUp removed (ran on break or after clock-out)',
     ...dayNames.map((d) => `Worked ${d}`), 'Top Jibble activity', 'Top ClickUp task',
   ];
   return csv([head, ...w.people.map((p) => [
     p.name, p.department, p.daysPresent, hmm(p.avgIn), hmm(p.avgOut), hmm(p.avgWorked), hmm(p.totalWorked), p.daysOnTarget,
-    hmm(p.avgBreak), hmm(p.totalBreak), p.daysOverBreak, hmm(p.avgClickup), hmm(p.totalClickup), hmm(p.totalClickupOnBreak),
+    hmm(p.avgBreak), hmm(p.totalBreak), p.daysOverBreak, hmm(p.avgClickup), hmm(p.totalClickup), hmm(p.totalClickupOffClock),
     ...p.days.map((d) => (d ? hmm(d.worked) : '')),
     topActivity(p.activities[0]), p.tasks[0]?.name || '',
   ])]);
@@ -195,12 +194,12 @@ export function weekCsv(w: WeekReport) {
 /** One row per person for a single day */
 export function dayCsv(w: WeekReport, date: string) {
   const i = w.dates.indexOf(date);
-  const head = ['Date', 'Name', 'Department', 'Clock-in', 'Clock-out', 'Worked', 'Break', 'ClickUp', 'ClickUp removed (ran during break)', 'Jibble activities', 'ClickUp tasks'];
+  const head = ['Date', 'Name', 'Department', 'Clock-in', 'Clock-out', 'Worked', 'Break', 'ClickUp', 'ClickUp removed (ran on break or after clock-out)', 'Jibble activities', 'ClickUp tasks'];
   return csv([head, ...w.people.map((p) => {
     const d = p.days[i];
     if (!d) return [date, p.name, p.department, 'Not in', '', '', '', '', '', '', ''];
     return [
-      date, p.name, p.department, hmm(d.firstIn), hmm(d.lastOut), hmm(d.worked), hmm(d.breaks), hmm(d.clickup), hmm(d.clickupOnBreak),
+      date, p.name, p.department, hmm(d.firstIn), hmm(d.lastOut), hmm(d.worked), hmm(d.breaks), hmm(d.clickup), hmm(d.clickupOffClock),
       d.activities.map((a) => `${topActivity(a)} ${hmm(a.minutes)}`).join('; '),
       d.tasks.map((t) => `${t.name} ${hmm(t.minutes)}`).join('; '),
     ];

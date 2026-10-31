@@ -42,7 +42,7 @@ lib/
   jibble.ts             ← Jibble API client (OAuth client-credentials), entries, screenshots, image analysis
   clickup.ts            ← ClickUp API client: members, today's timers (+ running timer per person), ranges
   week.ts               ← Week/day history builder (a week of Jibble + ClickUp history) + weekly and daily CSV
-  overlap.ts            ← Removes ClickUp time that ran during Jibble breaks
+  overlap.ts            ← Removes ClickUp time that ran off the clock (Jibble breaks, after clock-out)
   time.ts               ← Timezone-aware date helpers (team timezone, not server/browser timezone)
   types.ts              ← Shared types (BoardState, PersonRow, DayReport, WeekReport, …)
   mock.ts               ← Fake data for demo mode (MOCK=1), including past days for the weekly report
@@ -72,8 +72,8 @@ app/
 
 ### Key rules
 
-- **Pool** = clocked in (working) **and** not assigned **and** added by hand (`mode: free` in `pool.json`). Nobody joins automatically unless `AUTO_POOL=on`, which restores the old rule (*Auto* + no ClickUp timer running). Releasing an assigned person puts them back in the pool; clocking out clears it.
-- **ClickUp time during a Jibble break** is removed from ClickUp hours (live board, Daily, Weekly, CSV) and listed with task and times (`lib/overlap.ts`). Only logged Jibble breaks count, not missed (blank-screen) breaks or time after clock-out. A live-feed alert fires when someone goes on break with a timer running.
+- **Pool** = clocked in (working) **and** not assigned **and** either added by hand (`mode: free` in `pool.json`) **or** running a ClickUp timer on a task whose name *starts with* `POOL_TASK_WORD` (default "pool", any case, so "Pool" or "POOL - waiting" but not "Swimming pool ad"). People in via a Pool timer can't be removed by hand; they leave when they switch task or are assigned. `AUTO_POOL=on` also restores the old rule (*Auto* + no ClickUp timer running). Releasing an assigned person puts them back in the pool; clocking out clears it. `PersonRow.poolVia` says why someone is in the pool.
+- **ClickUp time off the clock** (during a logged Jibble break, or after a clock-out until the next clock-in or end of day) is removed from ClickUp hours (live board, Daily, Weekly, CSV) and listed with task, times and reason (`lib/overlap.ts`). Not removed: missed (blank-screen) breaks, and time before the day's first clock-in. A live-feed alert fires when someone goes on break or clocks out with a timer running.
 - **Needs attention** = working and (blank screen ≥ `AWAY_MINUTES` without a break, **or** screen frozen ≥ `FROZEN_MINUTES`, **or** no screenshots ≥ `NO_SCREENSHOT_MINUTES`), **or** a ClickUp timer still running while on break or clocked out.
 - **Missed break** = a run of blank screenshots during work time ≥ `AWAY_MINUTES`. This is an estimate, because Jibble takes a screenshot roughly every 10 minutes.
 - **Worked** = Jibble work time minus missed-break time. **Total break** = logged breaks + missed breaks.
@@ -120,7 +120,8 @@ See `.env.example`. **Never commit real keys.** `.env` is gitignored, and on Rai
 | `AWAY_MINUTES`, `NO_SCREENSHOT_MINUTES`, `FROZEN_MINUTES` | Alert thresholds |
 | `BREAK_ALLOWANCE_MINUTES` (90), `LONG_BREAK_MINUTES` (45), `WORK_TARGET_MINUTES` (420), `POOL_IDLE_ALERT_MINUTES` (15) | Report and alert thresholds |
 | `DATA_DIR` | Where JSON files are saved (see above) |
-| `AUTO_POOL` | `off` (default): the pool is filled by hand. `on`: anyone clocked in with no ClickUp timer joins automatically |
+| `AUTO_POOL` | `off` (default): the pool is filled by hand (and by Pool timers). `on`: anyone clocked in with no ClickUp timer joins automatically |
+| `POOL_TASK_WORD` | A running ClickUp timer on a task whose name starts with this word puts the person in the pool (default `pool`; empty turns it off) |
 | `MOCK=1` | Demo mode with fake data, no keys needed |
 
 ## Running it
@@ -171,6 +172,7 @@ npx tsc --noEmit             # typecheck (there is no test suite or linter confi
 5. Person panel (Jibble activities + ClickUp tasks per day) and the new aurora theme.
 6. Weekly tab with averages, CSV and print.
 7. ClickUp time during Jibble breaks removed and flagged; pool made manual (`AUTO_POOL`); Daily tab for any date with per-day CSV.
+8. ClickUp time after clock-out removed too; a ClickUp timer on a "Pool" task puts the person in the pool (`POOL_TASK_WORD`).
 
 ## Ideas not built yet
 

@@ -138,7 +138,7 @@ export default function WeekReport({ dept, deptColor }: { dept: string; deptColo
                         {p.avgClickup === null ? <span className="muted">Jibble only</span> : <>
                           <b>{fm(p.avgClickup)}</b>
                           {p.totalWorked > 0 && <small>{Math.round((p.totalClickup! / p.totalWorked) * 100)}% of worked</small>}
-                          {p.totalClickupOnBreak ? <small className="bad">−{fm(p.totalClickupOnBreak)} on break</small> : null}
+                          {p.totalClickupOffClock ? <small className="bad" title="Ran on a Jibble break or after clock-out">−{fm(p.totalClickupOffClock)} off the clock</small> : null}
                         </>}
                       </td>
                     )}
@@ -195,7 +195,7 @@ function Detail({ p, data }: { p: PersonWeek; data: Week }) {
                 <td className="num">{d.lastOut !== null ? clock(d.lastOut) : '–'}</td>
                 <td className="num"><b className={d.worked < data.settings.workTargetMin ? 'amber' : ''}>{fm(d.worked)}</b></td>
                 <td className="num"><span className={d.breaks > data.settings.breakAllowanceMin ? 'amber' : ''}>{fm(d.breaks)}</span></td>
-                {data.clickup && <td className="num">{d.clickup === null ? '–' : fm(d.clickup)}{d.clickupOnBreak ? <small className="bad"> −{fm(d.clickupOnBreak)}</small> : null}</td>}
+                {data.clickup && <td className="num">{d.clickup === null ? '–' : fm(d.clickup)}{d.clickupOffClock ? <small className="bad"> −{fm(d.clickupOffClock)}</small> : null}</td>}
               </> : <td colSpan={data.clickup ? 5 : 4} className="muted">Not in</td>}
             </tr>
           ))}
@@ -203,7 +203,7 @@ function Detail({ p, data }: { p: PersonWeek; data: Week }) {
             <td>Total</td><td /><td />
             <td className="num"><b>{fm(p.totalWorked)}</b></td>
             <td className="num">{fm(p.totalBreak)}</td>
-            {data.clickup && <td className="num">{p.totalClickup === null ? '–' : fm(p.totalClickup)}{p.totalClickupOnBreak ? <small className="bad"> −{fm(p.totalClickupOnBreak)}</small> : null}</td>}
+            {data.clickup && <td className="num">{p.totalClickup === null ? '–' : fm(p.totalClickup)}{p.totalClickupOffClock ? <small className="bad"> −{fm(p.totalClickupOffClock)}</small> : null}</td>}
           </tr>
         </tbody>
       </table>

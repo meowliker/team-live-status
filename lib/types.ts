@@ -14,8 +14,8 @@ export type Timer = { task: string; url: string | null; status: string | null; s
 export type TaskTime = { name: string; url: string | null; minutes: number; running: boolean };
 /** One stretch of ClickUp timer time (ms since epoch) */
 export type ClickupSpan = { from: number; to: number; task: string; url: string | null };
-/** ClickUp timer time that ran during a Jibble break (removed from ClickUp hours) */
-export type OnBreakSpan = { task: string; from: string; to: string; minutes: number };
+/** ClickUp timer time that ran while off the clock in Jibble: on a break or after clock-out (removed from ClickUp hours) */
+export type OffClockSpan = { task: string; from: string; to: string; minutes: number; reason: 'break' | 'out' };
 export type TimerInfo = { running: Timer | null; trackedTodayMin: number; tasks?: TaskTime[]; entries?: ClickupSpan[] };
 
 export type Segment = { kind: 'work' | 'break'; from: string; to: string; activity?: string | null; project?: string | null };
@@ -49,13 +49,14 @@ export type PersonRow = {
   mode: 'auto' | 'free' | 'busy';
   pick: { by: string; at: string } | null;
   inPool: boolean;
+  poolVia: 'hand' | 'clickup' | 'auto' | null; // added by someone, ClickUp timer on a "pool" task, or AUTO_POOL
   poolSince: string | null;
   clickupLinked: boolean;
   jibbleOnly: boolean;
   timer: Timer | null;
   trackedTodayMin: number | null;
   clickupTasks: TaskTime[] | null;
-  clickupOnBreak: { minutes: number; spans: OnBreakSpan[] } | null;
+  clickupOffClock: { minutes: number; spans: OffClockSpan[] } | null;
   timerWhileOff: boolean;
   away: { since: string; minutes: number } | null;
   frozen: { since: string; minutes: number; shots: number } | null;
@@ -108,8 +109,8 @@ export type WeekDay = {
   worked: number;
   breaks: number;
   clickup: number | null; // ClickUp time, minus anything that ran during a break
-  clickupOnBreak: number | null; // ClickUp time removed because it ran during a break
-  onBreak: OnBreakSpan[];
+  clickupOffClock: number | null; // ClickUp time removed because it ran during a break
+  offClock: OffClockSpan[];
   segments: Segment[];
   activities: { activity: string | null; project: string | null; minutes: number }[];
   tasks: { name: string; url: string | null; minutes: number }[];
@@ -131,7 +132,7 @@ export type PersonWeek = {
   daysOverBreak: number;
   totalClickup: number | null;
   avgClickup: number | null;
-  totalClickupOnBreak: number | null;
+  totalClickupOffClock: number | null;
   activities: { activity: string | null; project: string | null; minutes: number }[];
   tasks: { name: string; url: string | null; minutes: number }[];
 };
