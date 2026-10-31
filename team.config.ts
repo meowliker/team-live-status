@@ -9,29 +9,39 @@
 export type Member = { name: string; department: string; aliases?: string[]; clickup?: false };
 
 export const TEAM: Member[] = [
-  { name: 'Nitin', department: 'Creative Strategist' },
-  { name: 'Aryan Dewangan', department: 'Creative Strategist' },
-  { name: 'Apurwa', department: 'Creative Strategist' },
-  { name: 'Shivam', department: 'Creative Strategist' },
-  { name: 'Aryan Rathore', department: 'Creative Strategist' },
+  { name: 'Nitin', department: 'Creative Strategist', aliases: ['nitin@gividreams.com'] },
+  { name: 'Aryan Dewangan', department: 'Creative Strategist', aliases: ['aryan.d@gividreams.com'] },
+  { name: 'Apurwa', department: 'Creative Strategist', aliases: ['apurwa@gividreams.com'] },
+  { name: 'Shivam', department: 'Creative Strategist', aliases: ['shivam@gividreams.com'] },
+  { name: 'Aryan Rathore', department: 'Creative Strategist', aliases: ['aryan.r@gividreams.com'] },
 
-  { name: 'Deepti', department: 'Editor' },
-  { name: 'Armaan Ali', department: 'Editor' },
-  { name: 'Pankaj Kumar', department: 'Editor' },
-  { name: 'Tamim Ahmad', department: 'Editor' },
-  { name: 'Harish Kumar', department: 'Editor' },
-  { name: 'Prince Vaishnav', department: 'Editor' },
+  { name: 'Chirayu', department: 'Media Buyer', aliases: ['chirayu@gividreams.com'] },
+  { name: 'Nischay', department: 'Media Buyer', aliases: ['nischay@gividreams.com'] },
+  // Jibble only, matched by their Jibble email (plus WorkNexus email)
+  { name: 'Ryan Munene', department: 'Media Buyer', clickup: false, aliases: ['ryan@gividreams.com', 'ryanmunene.n@gmail.com'] },
+  { name: 'Salman', department: 'Media Buyer', clickup: false, aliases: ['salman@gividreams.com', 'salmanjaved5558@gmail.com'] },
+  { name: 'Shakthi', department: 'Media Buyer', clickup: false, aliases: ['shakthi@gividreams.com', 'shakthi.official1@gmail.com'] },
 
-  { name: 'Samriddhi', department: 'Graphic Designer' },
-  { name: 'Kirti Verma', department: 'Graphic Designer' },
+  { name: 'Deepti', department: 'Editor', aliases: ['deepti@gividreams.com'] },
+  { name: 'Armaan Ali', department: 'Editor', aliases: ['Arman Ali', 'armaan@gividreams.com'] },
+  { name: 'Pankaj Kumar', department: 'Editor', aliases: ['pankaj@gividreams.com'] },
+  { name: 'Tamim Ahmad', department: 'Editor', aliases: ['tamim@gividreams.com'] },
+  { name: 'Harish Kumar', department: 'Editor', aliases: ['harish@gividreams.com'] },
+  { name: 'Prince Vaishnav', department: 'Editor', aliases: ['prince@gividreams.com'] },
 
-  { name: 'Pragati Shukla', department: 'Website Designer' },
+  { name: 'Samriddhi', department: 'Graphic Designer', aliases: ['samriddhi@gividreams.com'] },
+  { name: 'Kirti Verma', department: 'Graphic Designer', aliases: ['kirti@gividreams.com'] },
 
-  // Jibble only, matched by their Jibble email
-  { name: 'Ryan Munene', department: 'Other', clickup: false, aliases: ['ryanmunene.n@gmail.com'] },
-  { name: 'Salman', department: 'Other', clickup: false, aliases: ['salmanjaved5558@gmail.com'] },
-  { name: 'Shakthi', department: 'Other', clickup: false, aliases: ['shakthi.official1@gmail.com'] },
+  { name: 'Vidit', department: 'Website Designer', aliases: ['vidit@gividreams.com'] },
+  { name: 'Anay', department: 'Website Designer', aliases: ['anay@gividreams.com'] },
+  { name: 'Pragati Shukla', department: 'Website Designer', aliases: ['Pragati', 'pragati@gividreams.com'] },
+
+  { name: 'Kazeem', department: 'Email Marketing', clickup: false, aliases: ['kazeem@gividreams.com'] },
+
+  { name: 'Mahesh', department: 'Finance', clickup: false, aliases: ['mahesh@gividreams.com'] },
+
+  { name: 'Santushti', department: 'HR', clickup: false, aliases: ['santushti@gividreams.com'] },
 ];
 
 // Order of department lanes on the board
-export const DEPARTMENTS = ['Editor', 'Creative Strategist', 'Graphic Designer', 'Website Designer', 'Media Buyer', 'Finance', 'HR', 'Other'];
+export const DEPARTMENTS = ['Creative Strategist', 'Media Buyer', 'Editor', 'Graphic Designer', 'Website Designer', 'Email Marketing', 'Finance', 'HR', 'Other'];
