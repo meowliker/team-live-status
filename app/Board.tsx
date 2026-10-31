@@ -97,7 +97,8 @@ export default function Board() {
   const attention = P.filter(needsAttention);
   const pool = P.filter((p) => p.inPool);
   const picked = P.filter((p) => p.pick && p.state !== 'out');
-  const onBreak = P.filter((p) => p.state === 'break').sort((a, b) => mins(b.since) - mins(a.since));
+  // People in the pool who are on a break stay in the Pool panel (marked "on break")
+  const onBreak = P.filter((p) => p.state === 'break' && !p.inPool).sort((a, b) => mins(b.since) - mins(a.since));
   const working = P.filter((p) => p.state === 'working' && !p.inPool && !p.pick);
   const out = P.filter((p) => p.state === 'out').sort((a, b) => Number(b.inToday) - Number(a.inToday));
   const stale = failed || (data.updatedAt ? mins(data.updatedAt) > 5 : true);
@@ -117,16 +118,16 @@ export default function Board() {
         <span className="badge">{badge}</span>
       </div>
       {children}
-      {actions || p.state === 'working' ? (
+      {actions || p.state === 'working' || p.inPool ? (
         <div className="acts">
           {actions}
-          {p.state === 'working' && (data.autoPool ? (
+          {(p.state === 'working' || p.inPool) && (data.autoPool ? (
             <select value={p.mode} onChange={(e) => act({ action: 'mode', personId: p.id, mode: e.target.value })} title="Availability">
               <option value="auto">{data.clickup ? 'Auto (ClickUp timer)' : 'Auto'}</option>
               <option value="free">Free</option>
               <option value="busy">Busy</option>
             </select>
-          ) : p.poolVia === 'clickup' ? (
+          ) : p.poolVia === 'clickup' && p.timer ? (
             <span className="hint" title="They're running a ClickUp timer on a “Pool” task. They leave the pool when they switch task or are assigned.">In pool via ClickUp timer</span>
           ) : p.inPool ? (
             <button className="btn sm" onClick={() => act({ action: 'mode', personId: p.id, mode: 'auto' })}>Remove from pool</button>
@@ -245,7 +246,8 @@ export default function Board() {
                             <div className="lane-h">{d}<span className={list.length ? '' : 'zero'}>{list.length ? `${list.length} free` : '0 free'}</span></div>
                             {list.length ? list.map((p) => (
                               <Card key={p.id} p={p} color="pool" badge={`free ${dur(p.poolSince)}`} actions={<button className="btn primary sm" onClick={() => pick(p.id)}>Assign</button>}>
-                                {mins(p.poolSince) >= S.poolIdleAlertMin && <div className="warn amber">Idle in pool {dur(p.poolSince)}</div>}
+                                {p.state === 'break' && <div className="warn amber">☕ On break {dur(p.since)} (still in the pool)</div>}
+                                {p.state !== 'break' && mins(p.poolSince) >= S.poolIdleAlertMin && <div className="warn amber">Idle in pool {dur(p.poolSince)}</div>}
                                 <Warn p={p} />
                                 <Meta p={p} />
                               </Card>

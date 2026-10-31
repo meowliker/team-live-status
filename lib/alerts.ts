@@ -3,7 +3,7 @@
 //   same time, and reply "sorted" in the same threads when it clears.
 // - Pool: when someone joins the pool, post in the pool channel tagging the people who hand out work, and reply
 //   in the thread when they're assigned or leave the pool.
-import { SLACK_MANAGERS, SLACK_POOL_TAG_DEPARTMENTS } from '../team.config';
+import { SLACK_MANAGERS, SLACK_POOL_ALWAYS_TAG, SLACK_POOL_TAG_DEPARTMENTS } from '../team.config';
 import { CONFIG } from './config';
 import * as slack from './slack';
 import type { PersonRow } from './types';
@@ -12,7 +12,8 @@ type Kind = 'away' | 'frozen' | 'noshots' | 'timerBreak' | 'timerOut';
 type Issue = { kind: Kind; minutes: number; message: string; label: string };
 type Where = { channel: string; ts: string };
 type Open = { startedAt: number; sentAt: number; dm: Where; reminded: boolean; label: string; managers: Where[] };
-type State = { open: Record<string, Open>; quietUntil: Record<string, number>; pool: Record<string, Where> };
+type PoolPost = Where & { since?: number; reminded?: boolean };
+type State = { open: Record<string, Open>; quietUntil: Record<string, number>; pool: Record<string, PoolPost> };
 
 const COOLDOWN_MIN = 15; // after a problem clears, don't message about the same thing again for this long
 
@@ -43,6 +44,7 @@ function issuesOf(p: PersonRow): Issue[] {
 
 export class SlackAlerts {
   state: State;
+  private missing = new Set<string>(); // people we couldn't find in Slack this round
   constructor(private load: () => State | null, private save: (s: State) => void) {
     this.state = { open: {}, quietUntil: {}, pool: {}, ...load() };
   }
@@ -55,13 +57,13 @@ export class SlackAlerts {
     if (!slack.slackOn()) return [];
     const now = Date.now();
     const notices: string[] = [];
-    const missing: string[] = [];
+    this.missing = new Set();
     const s = this.state;
     let changed = false;
     const userOf = async (p: { id: string; name: string }) => {
       const email = emails.get(p.id);
       const id = email ? await slack.userByEmail(email) : null;
-      if (!id && !missing.includes(p.name)) missing.push(p.name);
+      if (!id) this.missing.add(p.name);
       return id;
     };
 
@@ -71,7 +73,7 @@ export class SlackAlerts {
     };
 
     for (const p of people) {
-      try { changed = (await this.pool(p, people, userOf, event)) || changed; }
+      try { changed = (await this.pool(p, people, userOf, event, now)) || changed; }
       catch (e) { failed(`pool message in ${CONFIG.slackPoolChannel}; is the bot invited to that channel?`)(e); }
       try { changed = (await this.attention(p, people, userOf, event, now)) || changed; }
       catch (e) { failed(`message to ${p.name}`)(e); }
@@ -82,29 +84,62 @@ export class SlackAlerts {
     for (const id of Object.keys(s.pool)) if (!people.some((p) => p.id === id)) { delete s.pool[id]; changed = true; }
     for (const [key, until] of Object.entries(s.quietUntil)) if (until < now) { delete s.quietUntil[key]; changed = true; }
     if (changed) this.save(s);
-    if (missing.length) notices.push(`Slack: couldn't find ${missing.join(', ')} by email, so they weren't messaged. Use the same email in Slack and Jibble, or add their Slack email as \`slack\` in team.config.ts.`);
+    if (this.missing.size) notices.push(`Slack: couldn't find ${[...this.missing].join(', ')} by email, so they weren't messaged. Use the same email in Slack and Jibble, or add their Slack email as \`slack\` in team.config.ts.`);
     return notices;
   }
 
-  /** Announces someone joining the pool, and follows up in the thread when they leave it. Returns true if state changed. */
-  private async pool(p: PersonRow, people: PersonRow[], userOf: UserOf, event: Event) {
+  /**
+   * Announces someone joining the pool, reminds once if they're still free after POOL_IDLE_ALERT_MINUTES,
+   * and follows up in the thread when they leave it. Returns true if state changed.
+   */
+  private async pool(p: PersonRow, people: PersonRow[], userOf: UserOf, event: Event, now: number) {
     const s = this.state;
     const posted = s.pool[p.id];
-    if (!CONFIG.slackPoolChannel || p.inPool === !!posted) return false;
-    if (p.inPool) {
-      // Tag the strategists and media buyers who are in today (all of them if nobody is)
-      const tag = people.filter((x) => SLACK_POOL_TAG_DEPARTMENTS.includes(x.department) && x.id !== p.id);
-      const inToday = tag.filter((x) => x.state !== 'out');
-      const ids = [...new Set((await Promise.all((inToday.length ? inToday : tag).map(userOf))).filter((x): x is string => !!x))];
+    if (!CONFIG.slackPoolChannel) return false;
+    if (p.inPool && !posted) {
+      const tags = await this.poolTags(p, people, userOf);
       const via = p.poolVia === 'clickup' ? ' (their ClickUp timer is on a Pool task)' : '';
-      s.pool[p.id] = await slack.post(CONFIG.slackPoolChannel, `🟦 *${p.name}* (${p.department}) is free and ready for a task${via}. ${ids.map(slack.mention).join(' ')} can someone assign them?`);
+      s.pool[p.id] = { ...(await slack.post(CONFIG.slackPoolChannel, `🟦 *${p.name}* (${p.department}) is free and ready for a task${via}. ${tags} can someone assign them?`)), since: now, reminded: false };
       event(p.name, `was posted in ${CONFIG.slackPoolChannel} as free to assign`);
-    } else {
+      return true;
+    }
+    if (p.inPool && posted && !posted.reminded && now - (posted.since ?? now) >= CONFIG.poolIdleAlertMin * 60e3) {
+      const tags = await this.poolTags(p, people, userOf);
+      const mins = Math.round((now - posted.since!) / 60e3);
+      await slack.post(CONFIG.slackPoolChannel, `⏰ *${p.name}* is still free after ${mins} min. ${tags} can someone assign them a task?`, posted);
+      posted.reminded = true;
+      event(p.name, `pool reminder posted in ${CONFIG.slackPoolChannel}`);
+      return true;
+    }
+    if (!p.inPool && posted) {
       const why = p.pick ? `✅ Assigned by ${p.pick.by}.` : p.state === 'out' ? '✅ Clocked out, no longer in the pool.' : '✅ No longer in the pool.';
       await slack.post(CONFIG.slackPoolChannel, why, posted);
       delete s.pool[p.id];
+      return true;
     }
-    return true;
+    return false;
+  }
+
+  /**
+   * "<@U1> <@U2> …" for a pool post: the departments that hand out work who are in today (all of them if
+   * nobody is), plus SLACK_POOL_ALWAYS_TAG, never the person who is free.
+   */
+  private async poolTags(p: PersonRow, people: PersonRow[], userOf: UserOf) {
+    const dept = people.filter((x) => SLACK_POOL_TAG_DEPARTMENTS.includes(x.department) && x.id !== p.id);
+    const inToday = dept.filter((x) => x.state !== 'out');
+    const ids = await Promise.all((inToday.length ? inToday : dept).map(userOf));
+    for (const who of SLACK_POOL_ALWAYS_TAG) {
+      if (who.includes('@')) {
+        const id = await slack.userByEmail(who);
+        if (id) ids.push(id);
+        else this.missing.add(who);
+      } else {
+        const x = people.find((y) => y.name === who);
+        if (x && x.id !== p.id) ids.push(await userOf(x));
+        else if (!x) this.missing.add(`${who} (not on the board)`);
+      }
+    }
+    return [...new Set(ids.filter((x): x is string => !!x))].map(slack.mention).join(' ');
   }
 
   /** "Needs attention" messages for one person. Returns true if state changed. */

@@ -50,5 +50,8 @@ export const SLACK_MANAGERS = ['Apurwa'];
 // Tagged in the pool channel when someone becomes free, so they can assign them a task
 export const SLACK_POOL_TAG_DEPARTMENTS = ['Creative Strategist', 'Media Buyer'];
 
+// Always tagged in pool posts and reminders, clocked in or not (team list names, or Slack emails for people not on it)
+export const SLACK_POOL_ALWAYS_TAG = ['Chirayu', 'Nischay', 'anuragpataila1@gmail.com'];
+
 // Order of department lanes on the board
 export const DEPARTMENTS = ['Creative Strategist', 'Media Buyer', 'Editor', 'Graphic Designer', 'Website Designer', 'Email Marketing', 'Finance', 'HR', 'Other'];

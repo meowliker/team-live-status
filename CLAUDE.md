@@ -76,15 +76,15 @@ app/
 
 ### Key rules
 
-- **Pool** = clocked in (working) **and** not assigned **and** either added by hand (`mode: free` in `pool.json`) **or** running a ClickUp timer on a task whose name *starts with* `POOL_TASK_WORD` (default "pool", any case, so "Pool" or "POOL - waiting" but not "Swimming pool ad"). People in via a Pool timer can't be removed by hand; they leave when they switch task or are assigned. `AUTO_POOL=on` also restores the old rule (*Auto* + no ClickUp timer running). Releasing an assigned person puts them back in the pool; clocking out clears it. `PersonRow.poolVia` says why someone is in the pool.
+- **Pool** = clocked in (working **or on a break**) **and** not assigned **and** either added by hand (`mode: free` in `pool.json`) **or** they started a ClickUp timer on a task whose name *starts with* `POOL_TASK_WORD` (default "pool", any case, so "Pool" or "POOL - waiting" but not "Swimming pool ad"). Pool membership is sticky: a break or a paused/stopped timer doesn't take anyone out. People who joined via a Pool timer (`pool.viaTimer`) leave when they start a timer on another task; anyone leaves when assigned, removed by hand, or clocked out. On-break pool members show in the Pool panel (marked "on break"), not the On break panel. `AUTO_POOL=on` also restores the old rule (*Auto* + no ClickUp timer running). Releasing an assigned person puts them back in the pool; clocking out clears it. `PersonRow.poolVia` says why someone is in the pool.
 - **ClickUp time off the clock** (during a logged Jibble break, or after a clock-out until the next clock-in or end of day) is removed from ClickUp hours (live board, Daily, Weekly, CSV) and listed with task, times and reason (`lib/overlap.ts`). Not removed: missed (blank-screen) breaks, and time before the day's first clock-in. A live-feed alert fires when someone goes on break or clocks out with a timer running.
-- **Needs attention** = working and (blank screen ≥ `AWAY_MINUTES` without a break, **or** screen frozen ≥ `FROZEN_MINUTES`, **or** no screenshots ≥ `NO_SCREENSHOT_MINUTES`), **or** a ClickUp timer still running while on break or clocked out.
+- **Needs attention** = working and (blank screen ≥ `AWAY_MINUTES` without a break, **or** screen frozen ≥ `FROZEN_MINUTES`, **or** no screenshots ≥ `NO_SCREENSHOT_MINUTES`), **or** a ClickUp timer still running while on break or clocked out, once both the break/clock-out and the timer are older than `ATTENTION_GRACE_SECONDS` (60), so stopping one a few seconds after the other isn't flagged.
 - **Missed break** = a run of blank screenshots during work time ≥ `AWAY_MINUTES`. This is an estimate, because Jibble takes a screenshot roughly every 10 minutes.
 - **Worked** = Jibble work time minus missed-break time. **Total break** = logged breaks + missed breaks.
 - When someone clocks out, their Free/Busy choice and pool assignment are cleared.
 - **Jibble "tasks"** = the activity and project picked at clock-in. Each `In` entry starts a work segment carrying that activity/project.
 - **Slack, Needs attention:** one DM per problem (blank screen, frozen screen, no screenshots, ClickUp timer on break, ClickUp timer after clock-out). If still there `SLACK_REMIND_MINUTES` (10) after the DM: a reminder in the thread, and a DM to each name in `SLACK_MANAGERS` (`team.config.ts`; currently Apurwa), never about their own alert. When it clears: "✅ Sorted" in the threads, and no new message about the same thing for 15 min.
-- **Slack, pool:** when someone joins the pool, a post in `SLACK_POOL_CHANNEL` (default `#creatives`) tagging everyone in `SLACK_POOL_TAG_DEPARTMENTS` (Creative Strategist, Media Buyer) who is in today (all of them if nobody is). When they leave the pool, a thread reply says why (assigned by X, clocked out, or removed).
+- **Slack, pool:** when someone joins the pool, a post in `SLACK_POOL_CHANNEL` (default `#creatives`) tagging everyone in `SLACK_POOL_TAG_DEPARTMENTS` (Creative Strategist, Media Buyer) who is in today (all of them if nobody is), plus `SLACK_POOL_ALWAYS_TAG` (Chirayu, Nischay, Anurag by email) whether clocked in or not. If they're still in the pool after `POOL_IDLE_ALERT_MINUTES` (15), one reminder in the thread tags them all again. When they leave the pool, a thread reply says why (assigned by X, clocked out, or removed).
 - People are found in Slack by their Jibble email, or the `slack` email on their `team.config.ts` line. Slack state (open alerts, pool posts) is saved to `alerts.json` so a restart doesn't send duplicates.
 
 ### Matching people (Jibble ↔ roster ↔ ClickUp)
@@ -129,6 +129,7 @@ See `.env.example`. **Never commit real keys.** `.env` is gitignored, and on Rai
 | `BREAK_ALLOWANCE_MINUTES` (90), `LONG_BREAK_MINUTES` (45), `WORK_TARGET_MINUTES` (420), `POOL_IDLE_ALERT_MINUTES` (15) | Report and alert thresholds |
 | `DATA_DIR` | Where JSON files are saved (see above) |
 | `AUTO_POOL` | `off` (default): the pool is filled by hand (and by Pool timers). `on`: anyone clocked in with no ClickUp timer joins automatically |
+| `ATTENTION_GRACE_SECONDS` | Grace before a ClickUp timer running on break / after clock-out is flagged (default 60) |
 | `POOL_TASK_WORD` | A running ClickUp timer on a task whose name starts with this word puts the person in the pool (default `pool`; empty turns it off) |
 | `SLACK_BOT_TOKEN` | Slack bot token (`xoxb-…`, scopes `chat:write`, `im:write`, `users:read`, `users:read.email`). Slack is off without it |
 | `SLACK_POOL_CHANNEL` | Channel for pool posts (default `#creatives`; the bot must be invited). Empty = no pool posts |
@@ -163,7 +164,7 @@ npx tsc --noEmit             # typecheck (there is no test suite or linter confi
 | Fix someone not found or not linked | Settings page (no deploy needed, but needs the volume), or an alias in `team.config.ts` |
 | Change thresholds or timezone | Environment variables on Railway (no code change) |
 | Change the look | `app/globals.css`: colour tokens at the top (`:root` and the light-mode block) |
-| Change who's told on Slack | `SLACK_MANAGERS` (escalations) and `SLACK_POOL_TAG_DEPARTMENTS` (pool posts) in `team.config.ts`; message wording in `lib/alerts.ts` |
+| Change who's told on Slack | `SLACK_MANAGERS` (escalations), `SLACK_POOL_TAG_DEPARTMENTS` and `SLACK_POOL_ALWAYS_TAG` (pool posts) in `team.config.ts`; message wording in `lib/alerts.ts` |
 
 ## Decisions and gotchas
 
@@ -187,6 +188,8 @@ npx tsc --noEmit             # typecheck (there is no test suite or linter confi
 7. ClickUp time during Jibble breaks removed and flagged; pool made manual (`AUTO_POOL`); Daily tab for any date with per-day CSV.
 8. ClickUp time after clock-out removed too; a ClickUp timer on a "Pool" task puts the person in the pool (`POOL_TASK_WORD`).
 9. Slack: Needs-attention DMs with reminder + manager escalation, and pool posts in #creatives.
+10. Pool posts always tag Chirayu, Nischay and Anurag; one pool reminder after 15 min.
+11. Pool membership survives breaks and paused timers; 1-minute grace before flagging a timer left running off the clock.
 
 ## Ideas not built yet
 

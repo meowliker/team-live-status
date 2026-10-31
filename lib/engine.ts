@@ -14,7 +14,8 @@ const norm = (n: string | null | undefined) => (n || '').toLowerCase().replace(/
 const ms = (a: string, b: string) => new Date(b).getTime() - new Date(a).getTime();
 
 // ───────────────────────── persisted state ─────────────────────────
-type Pool = { modes: Record<string, 'free' | 'busy'>; picks: Record<string, { by: string; at: string }> };
+// viaTimer: joined by running a ClickUp timer on a Pool task (they leave when they start a timer on another task)
+type Pool = { modes: Record<string, 'free' | 'busy'>; picks: Record<string, { by: string; at: string }>; viaTimer?: Record<string, true> };
 const file = (n: string) => path.join(CONFIG.dataDir, n);
 const readJson = <T,>(n: string, d: T): T => {
   try { return JSON.parse(fs.readFileSync(file(n), 'utf8')); } catch { return d; }
@@ -318,18 +319,32 @@ class Engine {
         const t = cu && tmap ? tmap.get(cu.id) || { running: null, trackedTodayMin: 0 } : null;
         const timer = t?.running || null;
 
-        if (state === 'out' && (this.pool.modes[p.id] || this.pool.picks[p.id])) {
+        const viaTimer = (this.pool.viaTimer ||= {});
+        if (state === 'out' && (this.pool.modes[p.id] || this.pool.picks[p.id] || viaTimer[p.id])) {
           delete this.pool.modes[p.id];
           delete this.pool.picks[p.id];
+          delete viaTimer[p.id];
+          this.savePool();
+        }
+        // A timer on a Pool task puts them in the pool and they stay there through breaks and paused timers,
+        // until they start a timer on another task, are assigned, removed by hand, or clock out
+        const poolTimer = !!timer && poolTaskRe !== null && poolTaskRe.test(timer.task);
+        if (poolTimer && !this.pool.picks[p.id] && this.pool.modes[p.id] !== 'free') {
+          this.pool.modes[p.id] = 'free';
+          viaTimer[p.id] = true;
+          this.savePool();
+        } else if (timer && !poolTimer && viaTimer[p.id]) {
+          delete this.pool.modes[p.id];
+          delete viaTimer[p.id];
           this.savePool();
         }
         const mode = (this.pool.modes[p.id] || 'auto') as PersonRow['mode'];
         const pick = this.pool.picks[p.id] || null;
         const timerKnown = !!(cu && tmap);
         // Pool: added by hand, a ClickUp timer on a "pool" task, or (AUTO_POOL=on) no ClickUp timer at all
-        const poolTimer = !!timer && poolTaskRe !== null && poolTaskRe.test(timer.task);
-        const autoFree = CONFIG.autoPool && mode === 'auto' && (timerKnown ? !timer : !clickupOn());
-        const poolVia: PersonRow['poolVia'] = state !== 'working' || pick ? null : mode === 'free' ? 'hand' : poolTimer ? 'clickup' : autoFree ? 'auto' : null;
+        const autoFree = state === 'working' && CONFIG.autoPool && mode === 'auto' && (timerKnown ? !timer : !clickupOn());
+        // Being on a break doesn't take anyone out of the pool; only clocking out does
+        const poolVia: PersonRow['poolVia'] = state === 'out' || pick ? null : mode === 'free' ? (viaTimer[p.id] ? 'clickup' : 'hand') : autoFree ? 'auto' : null;
         const inPool = poolVia !== null;
         if (inPool && !this.poolSince.has(p.id)) this.poolSince.set(p.id, this.prev.size ? nowIso : (since || nowIso));
         if (!inPool) this.poolSince.delete(p.id);
@@ -354,7 +369,10 @@ class Engine {
           trackedTodayMin: cuDay ? cuDay.trackedMin : t ? t.trackedTodayMin : null,
           clickupTasks: cuDay ? cuDay.tasks.map((x) => ({ ...x, running: x.name === timer?.task })) : t ? t.tasks || [] : null,
           clickupOffClock: cuDay && cuDay.removedMin > 0 ? { minutes: cuDay.removedMin, spans: cuDay.offClock } : null,
-          timerWhileOff: !!timer && state !== 'working',
+          // only after the grace period, so stopping the ClickUp timer just after Jibble (or the other way round) is fine
+          timerWhileOff: !!timer && state !== 'working'
+            && Date.now() - new Date(since || 0).getTime() >= CONFIG.attentionGraceSec * 1000
+            && Date.now() - new Date(timer.startedAt).getTime() >= CONFIG.attentionGraceSec * 1000,
           ...away,
           day,
         };
@@ -369,7 +387,7 @@ class Engine {
             if (timer) this.pushEvent(member.name, `started timer: ${timer.task}`, 'timer');
             else if (before.timer) this.pushEvent(member.name, `stopped timer: ${before.timer.task}`, 'timer');
           }
-          if (!before.inPool && inPool) this.pushEvent(member.name, poolVia === 'clickup' ? `joined the pool (ClickUp timer on “${timer!.task}”)` : 'joined the pool', 'pool');
+          if (!before.inPool && inPool) this.pushEvent(member.name, poolVia === 'clickup' && timer ? `joined the pool (ClickUp timer on “${timer.task}”)` : 'joined the pool', 'pool');
           if (!before.timerWhileOff && row.timerWhileOff) this.pushEvent(member.name, `ClickUp timer still running ${state === 'break' ? 'on break' : 'after clock-out'} (${timer!.task}): this time is removed from their ClickUp hours`, 'alert');
           if (!before.frozen && row.frozen) this.pushEvent(member.name, `screen hasn't changed for ${row.frozen.minutes} min`, 'alert');
           if (!before.away && row.away) this.pushEvent(member.name, `looks away: blank screen ${row.away.minutes} min without a break`, 'alert');
@@ -487,7 +505,7 @@ class Engine {
   setMode(id: string, mode: 'auto' | 'free' | 'busy') {
     const p = this.find(id);
     if (!p) return 'Unknown person';
-    if (mode === 'auto') delete this.pool.modes[id];
+    if (mode === 'auto') { delete this.pool.modes[id]; delete this.pool.viaTimer?.[id]; }
     else this.pool.modes[id] = mode;
     this.savePool();
     this.pushEvent(p.name, mode === 'free' ? (CONFIG.autoPool ? 'was marked free' : 'was added to the pool') : mode === 'busy' ? 'was marked busy' : (CONFIG.autoPool ? 'set back to auto (ClickUp timer)' : 'was removed from the pool'), 'pool');
