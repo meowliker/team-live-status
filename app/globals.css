@@ -170,6 +170,7 @@ div.av { cursor: default; }
 .warn { font-size: 12px; font-weight: 700; color: var(--alert); }
 .warn.amber { color: var(--break); }
 .warn.violet { color: var(--picked); }
+.warn.quiet { color: var(--muted); font-weight: 600; }
 .acts { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .acts select { border: 1px solid var(--line); background: var(--raised); border-radius: 8px; padding: 3px 6px; font-size: 12px; }
 select option { background: var(--panel-solid); color: var(--text); }

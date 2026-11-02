@@ -162,6 +162,7 @@ export default function Board() {
   const Warn = ({ p }: { p: PersonRow }) => (
     <>
       {p.timerWhileOff && <div className="warn amber">⚠️ ClickUp timer still running while {p.state === 'break' ? 'on break' : 'clocked out'} (this time is removed from their ClickUp hours)</div>}
+      {p.state === 'working' && p.quiet && <div className="warn quiet">🎬 Screen checks paused: ClickUp timer on “{p.quiet}”</div>}
       {p.state === 'working' && p.away && <div className="warn">⚠️ Blank screen {dur(p.away.since)} ({p.blankStreak} screenshots), no break logged</div>}
       {p.state === 'working' && !p.away && p.frozen && <div className="warn violet">⚠️ Screen frozen {dur(p.frozen.since)} ({p.frozen.shots} identical screenshots)</div>}
       {p.state === 'working' && !p.away && !p.frozen && p.noScreenshots && <div className="warn">⚠️ No screenshots for {fm(p.noScreenshots)} (tracker off?)</div>}

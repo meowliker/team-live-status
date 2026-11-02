@@ -30,6 +30,9 @@ export const CONFIG = {
   autoPool: on(process.env.AUTO_POOL, false),
   // A running ClickUp timer on a task whose name contains this word puts the person in the pool (empty = off)
   poolTaskWord: (process.env.POOL_TASK_WORD ?? 'pool').trim(),
+  // A running ClickUp timer on a task whose name contains one of these (comma separated, any case) pauses the
+  // screen checks (blank, frozen, no screenshots): shoots, meetings, explaining a task to someone. Empty = off
+  quietTaskWords: (process.env.QUIET_TASK_WORDS ?? 'shoot,meeting,explaining task').split(',').map((w) => w.trim()).filter(Boolean),
 
   // Slack messages for "Needs attention" (off until a bot token is set)
   slackToken: process.env.SLACK_BOT_TOKEN || '',
