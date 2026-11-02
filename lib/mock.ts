@@ -22,7 +22,7 @@ const scenario: Sc[] = TEAM.map((_, i): Sc => {
   if (r === 0) return ['In', 95, 0, true];
   if (r === 1) return ['In', 40, 0, false];
   if (r === 2) return ['StartBreak', 12 + i, 0, i % 2 === 0];
-  if (r === 3) return ['In', 130, i === 3 ? 3 : 0, true];
+  if (r === 3) return ['In', 130, i === 3 || i === 10 ? 3 : 0, true]; // i=10: blank screen, but on a shoot
   if (r === 4) return ['In', 70, 0, true];
   if (r === 5) return ['Out', 300, 0, false];
   return ['In', 25, 0, false];
@@ -71,7 +71,7 @@ export async function getTimers(): Promise<Map<number, TimerInfo>> {
     const [state, since] = scenario[i];
     const pool = i === 6; // waiting for work: timer on a "Pool" task
     const running = scenario[i][3] || pool;
-    const task = pool ? 'Pool' : tasks[i % tasks.length];
+    const task = pool ? 'Pool' : i === 10 ? 'Product shoot – Bloom Little' : tasks[i % tasks.length];
     map.set(1000 + i, {
       trackedTodayMin: 60 + ((i * 37) % 240),
       running: running ? { task, url: 'https://app.clickup.com', status: 'in progress', startedAt: min(pool ? 12 : 10 + ((i * 13) % 80)) } : null,

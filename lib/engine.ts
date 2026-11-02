@@ -27,6 +27,18 @@ const writeJson = (n: string, v: unknown) => {
   } catch (e) { console.warn(`could not save ${n}: ${(e as Error).message}`); }
 };
 
+// ClickUp tasks during which the screen isn't watched (shoots, meetings, explaining a task)
+const quietTaskRe = CONFIG.quietTaskWords.length
+  ? new RegExp(CONFIG.quietTaskWords.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'i') : null;
+export const isQuietTask = (task: string) => quietTaskRe !== null && quietTaskRe.test(task);
+type Span = { from: number; to: number };
+/** Parts of from–to that aren't covered by any of the spans */
+function minus(from: number, to: number, spans: Span[]): Span[] {
+  let parts: Span[] = [{ from, to }];
+  for (const q of spans) parts = parts.flatMap((x) => q.to <= x.from || q.from >= x.to ? [x]
+    : [{ from: x.from, to: q.from }, { from: q.to, to: x.to }].filter((y) => y.to > y.from));
+  return parts;
+}
 /** Task names that start with the pool word, any case ("Pool", "POOL", "Pool - waiting"), but not "Swimming pool ad" */
 const poolTaskRe = CONFIG.poolTaskWord ? new RegExp(`^\\W*${CONFIG.poolTaskWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i') : null;
 
@@ -168,7 +180,10 @@ class Engine {
     return out;
   }
 
-  awayInfo(personId: string, workingSince: string) {
+  awayInfo(personId: string, workingSince: string, quiet: Span[] = []) {
+    // after a shoot/meeting timer stops, start watching again from that moment
+    const lastQuiet = Math.max(0, ...quiet.map((q) => q.to).filter((t) => t <= Date.now()));
+    if (lastQuiet > new Date(workingSince).getTime()) workingSince = new Date(lastQuiet).toISOString();
     const list = (this.shots.get(personId) || []).filter((s) => new Date(s.time) >= new Date(workingSince));
     const now = Date.now();
     let awaySince: string | null = null;
@@ -185,7 +200,7 @@ class Engine {
     };
   }
 
-  dayReport(entries: JibbleEntry[], personShots: Shot[], now: string): DayReport {
+  dayReport(entries: JibbleEntry[], personShots: Shot[], now: string, quiet: Span[] = []): DayReport {
     const segments: Segment[] = [];
     entries.forEach((e, i) => {
       if (e.type === 'Out') return;
@@ -196,7 +211,10 @@ class Engine {
     });
     const overlays: Overlay[] = [];
     if (CONFIG.screenshotChecks) {
-      for (const seg of segments.filter((x) => x.kind === 'work')) {
+      // screen checks skip the time a shoot/meeting ClickUp timer was running
+      const pieces = segments.filter((x) => x.kind === 'work').flatMap((x) => minus(new Date(x.from).getTime(), new Date(x.to).getTime(), quiet))
+        .map((x) => ({ from: new Date(x.from).toISOString(), to: new Date(x.to).toISOString() }));
+      for (const seg of pieces) {
         const list = personShots.filter((s) => new Date(s.time) >= new Date(seg.from) && new Date(s.time) < new Date(seg.to));
         for (let i = 0; i < list.length; i++) {
           if (!list[i].blank) continue;
@@ -349,8 +367,12 @@ class Engine {
         if (inPool && !this.poolSince.has(p.id)) this.poolSince.set(p.id, this.prev.size ? nowIso : (since || nowIso));
         if (!inPool) this.poolSince.delete(p.id);
 
-        const away = state === 'working' && CONFIG.screenshotChecks ? this.awayInfo(p.id, since!) : { away: null, frozen: null, noScreenshots: null, blankStreak: 0 };
-        const day = todays.has(p.id) ? this.dayReport(todays.get(p.id)!, this.shots.get(p.id) || [], nowIso) : null;
+        // A ClickUp timer on a shoot / meeting / explaining-task task pauses the screen checks while it runs
+        const quiet = timer && isQuietTask(timer.task) ? timer.task : null;
+        const quietSpans = (t?.entries || []).filter((x) => isQuietTask(x.task)).map((x) => ({ from: x.from, to: x.to }));
+        const noAway = { away: null, frozen: null, noScreenshots: null, blankStreak: 0 };
+        const away = state === 'working' && CONFIG.screenshotChecks && !quiet ? this.awayInfo(p.id, since!, quietSpans) : noAway;
+        const day = todays.has(p.id) ? this.dayReport(todays.get(p.id)!, this.shots.get(p.id) || [], nowIso, quietSpans) : null;
         // ClickUp time that ran during a Jibble break is taken off their ClickUp hours
         const off = day ? offClockSpans(day.segments, todays.get(p.id)!, Date.now()) : [];
         const cuDay = t?.entries ? removeOffClockTime(t.entries, off) : null;
@@ -373,6 +395,7 @@ class Engine {
           timerWhileOff: !!timer && state !== 'working'
             && Date.now() - new Date(since || 0).getTime() >= CONFIG.attentionGraceSec * 1000
             && Date.now() - new Date(timer.startedAt).getTime() >= CONFIG.attentionGraceSec * 1000,
+          quiet,
           ...away,
           day,
         };
@@ -387,6 +410,8 @@ class Engine {
             if (timer) this.pushEvent(member.name, `started timer: ${timer.task}`, 'timer');
             else if (before.timer) this.pushEvent(member.name, `stopped timer: ${before.timer.task}`, 'timer');
           }
+          if (!before.quiet && quiet && state === 'working') this.pushEvent(member.name, `screen checks paused: ClickUp timer on “${quiet}”`, 'timer');
+          if (before.quiet && !quiet && state === 'working') this.pushEvent(member.name, `screen checks back on (stopped “${before.quiet}”)`, 'timer');
           if (!before.inPool && inPool) this.pushEvent(member.name, poolVia === 'clickup' && timer ? `joined the pool (ClickUp timer on “${timer.task}”)` : 'joined the pool', 'pool');
           if (!before.timerWhileOff && row.timerWhileOff) this.pushEvent(member.name, `ClickUp timer still running ${state === 'break' ? 'on break' : 'after clock-out'} (${timer!.task}): this time is removed from their ClickUp hours`, 'alert');
           if (!before.frozen && row.frozen) this.pushEvent(member.name, `screen hasn't changed for ${row.frozen.minutes} min`, 'alert');

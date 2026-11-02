@@ -58,6 +58,8 @@ export type PersonRow = {
   clickupTasks: TaskTime[] | null;
   clickupOffClock: { minutes: number; spans: OffClockSpan[] } | null;
   timerWhileOff: boolean;
+  /** ClickUp task (shoot, meeting, …) that's pausing their screen checks right now, if any */
+  quiet: string | null;
   away: { since: string; minutes: number } | null;
   frozen: { since: string; minutes: number; shots: number } | null;
   noScreenshots: number | null;
