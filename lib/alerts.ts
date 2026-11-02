@@ -2,8 +2,8 @@
 // - "Needs attention": tell the person once, remind them after SLACK_REMIND_MINUTES and tell the managers at the
 //   same time, and reply "sorted" in the same threads when it clears.
 // - Pool: when someone joins the pool, post in the pool channel tagging the people who hand out work, and reply
-//   in the thread when they're assigned or leave the pool.
-import { SLACK_MANAGERS, SLACK_POOL_ALWAYS_TAG, SLACK_POOL_TAG_DEPARTMENTS } from '../team.config';
+//   in the thread when they're assigned or leave the pool. Pool posts notify the channel with @here (SLACK_POOL_MENTION).
+import { SLACK_MANAGERS } from '../team.config';
 import { CONFIG } from './config';
 import * as slack from './slack';
 import type { PersonRow } from './types';
@@ -73,7 +73,7 @@ export class SlackAlerts {
     };
 
     for (const p of people) {
-      try { changed = (await this.pool(p, people, userOf, event, now)) || changed; }
+      try { changed = (await this.pool(p, event, now)) || changed; }
       catch (e) { failed(`pool message in ${CONFIG.slackPoolChannel}; is the bot invited to that channel?`)(e); }
       try { changed = (await this.attention(p, people, userOf, event, now)) || changed; }
       catch (e) { failed(`message to ${p.name}`)(e); }
@@ -92,19 +92,19 @@ export class SlackAlerts {
    * Announces someone joining the pool, reminds once if they're still free after POOL_IDLE_ALERT_MINUTES,
    * and follows up in the thread when they leave it. Returns true if state changed.
    */
-  private async pool(p: PersonRow, people: PersonRow[], userOf: UserOf, event: Event, now: number) {
+  private async pool(p: PersonRow, event: Event, now: number) {
     const s = this.state;
     const posted = s.pool[p.id];
     if (!CONFIG.slackPoolChannel) return false;
     if (p.inPool && !posted) {
-      const tags = await this.poolTags(p, people, userOf);
+      const tags = CONFIG.slackPoolMention;
       const via = p.poolVia === 'clickup' ? ' (their ClickUp timer is on a Pool task)' : '';
       s.pool[p.id] = { ...(await slack.post(CONFIG.slackPoolChannel, `🟦 *${p.name}* (${p.department}) is free and ready for a task${via}. ${tags} can someone assign them?`)), since: now, reminded: false };
       event(p.name, `was posted in ${CONFIG.slackPoolChannel} as free to assign`);
       return true;
     }
     if (p.inPool && posted && !posted.reminded && now - (posted.since ?? now) >= CONFIG.poolIdleAlertMin * 60e3) {
-      const tags = await this.poolTags(p, people, userOf);
+      const tags = CONFIG.slackPoolMention;
       const mins = Math.round((now - posted.since!) / 60e3);
       await slack.post(CONFIG.slackPoolChannel, `⏰ *${p.name}* is still free after ${mins} min. ${tags} can someone assign them a task?`, posted);
       posted.reminded = true;
@@ -118,28 +118,6 @@ export class SlackAlerts {
       return true;
     }
     return false;
-  }
-
-  /**
-   * "<@U1> <@U2> …" for a pool post: the departments that hand out work who are in today (all of them if
-   * nobody is), plus SLACK_POOL_ALWAYS_TAG, never the person who is free.
-   */
-  private async poolTags(p: PersonRow, people: PersonRow[], userOf: UserOf) {
-    const dept = people.filter((x) => SLACK_POOL_TAG_DEPARTMENTS.includes(x.department) && x.id !== p.id);
-    const inToday = dept.filter((x) => x.state !== 'out');
-    const ids = await Promise.all((inToday.length ? inToday : dept).map(userOf));
-    for (const who of SLACK_POOL_ALWAYS_TAG) {
-      if (who.includes('@')) {
-        const id = await slack.userByEmail(who);
-        if (id) ids.push(id);
-        else this.missing.add(who);
-      } else {
-        const x = people.find((y) => y.name === who);
-        if (x && x.id !== p.id) ids.push(await userOf(x));
-        else if (!x) this.missing.add(`${who} (not on the board)`);
-      }
-    }
-    return [...new Set(ids.filter((x): x is string => !!x))].map(slack.mention).join(' ');
   }
 
   /** "Needs attention" messages for one person. Returns true if state changed. */

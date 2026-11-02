@@ -20,7 +20,7 @@ A single web page that shows a team **live**: who is working, on break, free to 
 | **Daily** tab | Any date (Today / Yesterday / ‹ › / date picker). Today is the live report: clock-in/out, worked vs target, ClickUp tracked, breaks vs allowance, missed-break and frozen-screen flags, colour timeline. Past days are rebuilt from Jibble + ClickUp history (no screenshot flags) and each row expands to that day's Jibble activities and ClickUp tasks. **Download CSV** per day. |
 | **Weekly** tab | Pick a week (This week / Last week / ‹ ›). Team averages, then per person: days in, avg clock-in/out, avg worked per day and days on target, avg break and days over allowance, ClickUp per day and coverage, and a bar per day. Click a row for day-by-day numbers, Jibble activities and top ClickUp tasks. **Download CSV** and **Print**. |
 | **Person panel** | Click any name or avatar: their day, timeline, time per Jibble activity + project, and time per ClickUp task. |
-| **Slack** (optional) | DMs for *Needs attention* (reminder + managers after `SLACK_REMIND_MINUTES`, "✅ Sorted" when fixed) and pool posts in `SLACK_POOL_CHANNEL` tagging `SLACK_POOL_TAG_DEPARTMENTS`, with "✅ Assigned by …" in the thread. |
+| **Slack** (optional) | DMs for *Needs attention* (reminder + managers after `SLACK_REMIND_MINUTES`, "✅ Sorted" when fixed) and pool posts in `SLACK_POOL_CHANNEL` with @here, with "✅ Assigned by …" in the thread. |
 | **Settings** (`/settings`) | Link each team member to a Jibble person and a ClickUp member by hand (overrides auto matching), or mark them "Not on ClickUp". Lists unlinked Jibble/ClickUp accounts. Warns if data would be wiped on redeploy. |
 
 ## Tech stack
@@ -84,7 +84,7 @@ app/
 - When someone clocks out, their Free/Busy choice and pool assignment are cleared.
 - **Jibble "tasks"** = the activity and project picked at clock-in. Each `In` entry starts a work segment carrying that activity/project.
 - **Slack, Needs attention:** one DM per problem (blank screen, frozen screen, no screenshots, ClickUp timer on break, ClickUp timer after clock-out). If still there `SLACK_REMIND_MINUTES` (10) after the DM: a reminder in the thread, and a DM to each name in `SLACK_MANAGERS` (`team.config.ts`; currently Apurwa), never about their own alert. When it clears: "✅ Sorted" in the threads, and no new message about the same thing for 15 min.
-- **Slack, pool:** when someone joins the pool, a post in `SLACK_POOL_CHANNEL` (default `#creatives`) tagging everyone in `SLACK_POOL_TAG_DEPARTMENTS` (Creative Strategist, Media Buyer) who is in today (all of them if nobody is), plus `SLACK_POOL_ALWAYS_TAG` (Chirayu, Nischay, Anurag by email) whether clocked in or not. If they're still in the pool after `POOL_IDLE_ALERT_MINUTES` (15), one reminder in the thread tags them all again. When they leave the pool, a thread reply says why (assigned by X, clocked out, or removed).
+- **Slack, pool:** when someone joins the pool, a post in `SLACK_POOL_CHANNEL` (default `#creatives`) with `@here` (or `@channel` if `SLACK_POOL_MENTION=channel`), not individual tags. If they're still in the pool after `POOL_IDLE_ALERT_MINUTES` (15), one reminder in the thread with the same mention. When they leave the pool, a thread reply says why (assigned by X, clocked out, or removed).
 - People are found in Slack by their Jibble email, or the `slack` email on their `team.config.ts` line. Slack state (open alerts, pool posts) is saved to `alerts.json` so a restart doesn't send duplicates.
 
 ### Matching people (Jibble ↔ roster ↔ ClickUp)
@@ -133,6 +133,7 @@ See `.env.example`. **Never commit real keys.** `.env` is gitignored, and on Rai
 | `POOL_TASK_WORD` | A running ClickUp timer on a task whose name starts with this word puts the person in the pool (default `pool`; empty turns it off) |
 | `SLACK_BOT_TOKEN` | Slack bot token (`xoxb-…`, scopes `chat:write`, `im:write`, `users:read`, `users:read.email`). Slack is off without it |
 | `SLACK_POOL_CHANNEL` | Channel for pool posts (default `#creatives`; the bot must be invited). Empty = no pool posts |
+| `SLACK_POOL_MENTION` | `here` (default): pool posts use @here; `channel`: @channel |
 | `SLACK_REMIND_MINUTES` | Minutes before the reminder + manager message (default 10) |
 | `SLACK_DRY_RUN` | `on` logs Slack messages instead of sending (always on in demo mode) |
 | `MOCK=1` | Demo mode with fake data, no keys needed |
@@ -164,7 +165,7 @@ npx tsc --noEmit             # typecheck (there is no test suite or linter confi
 | Fix someone not found or not linked | Settings page (no deploy needed, but needs the volume), or an alias in `team.config.ts` |
 | Change thresholds or timezone | Environment variables on Railway (no code change) |
 | Change the look | `app/globals.css`: colour tokens at the top (`:root` and the light-mode block) |
-| Change who's told on Slack | `SLACK_MANAGERS` (escalations), `SLACK_POOL_TAG_DEPARTMENTS` and `SLACK_POOL_ALWAYS_TAG` (pool posts) in `team.config.ts`; message wording in `lib/alerts.ts` |
+| Change who's told on Slack | `SLACK_MANAGERS` (escalations) in `team.config.ts`, `SLACK_POOL_MENTION` (pool posts) on Railway; message wording in `lib/alerts.ts` |
 
 ## Decisions and gotchas
 
@@ -190,6 +191,7 @@ npx tsc --noEmit             # typecheck (there is no test suite or linter confi
 9. Slack: Needs-attention DMs with reminder + manager escalation, and pool posts in #creatives.
 10. Pool posts always tag Chirayu, Nischay and Anurag; one pool reminder after 15 min.
 11. Pool membership survives breaks and paused timers; 1-minute grace before flagging a timer left running off the clock.
+12. Pool posts use @here instead of tagging people one by one.
 
 ## Ideas not built yet
 

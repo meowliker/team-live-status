@@ -36,6 +36,8 @@ export const CONFIG = {
   slackRemindMin: num(process.env.SLACK_REMIND_MINUTES, 10),
   // Where to post when someone joins the pool (channel name or id; the bot must be in it). Empty = off
   slackPoolChannel: (process.env.SLACK_POOL_CHANNEL ?? '#creatives').trim(),
+  // Who a pool post notifies: "here" = @here (everyone active in the channel), "channel" = @channel (everyone in it)
+  slackPoolMention: (process.env.SLACK_POOL_MENTION || 'here').trim().toLowerCase() === 'channel' ? '<!channel>' : '<!here>',
   // Log the messages instead of sending them (always on in demo mode)
   slackDryRun: on(process.env.SLACK_DRY_RUN, false) || on(process.env.MOCK, false),
 };
