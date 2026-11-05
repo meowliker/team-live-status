@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import type { PersonWeek, WeekReport as Week } from '@/lib/types';
+import type { PersonWeek, SetDay, WeekReport as Week } from '@/lib/types';
 import { DEPT_COLORS, fm, initials } from './format';
 
 // minutes after midnight → "9:41 AM"
@@ -13,8 +13,9 @@ const clock = (m: number | null) => {
 const day = (d: string, opts: Intl.DateTimeFormatOptions) => new Date(d + 'T12:00:00Z').toLocaleDateString('en-GB', { ...opts, timeZone: 'UTC' });
 const shift = (d: string, n: number) => new Date(Date.parse(d + 'T12:00:00Z') + n * 86400e3).toISOString().slice(0, 10);
 
-type SortKey = 'name' | 'daysPresent' | 'avgIn' | 'avgOut' | 'avgWorked' | 'avgBreak' | 'avgClickup';
-const COLS: [SortKey, string][] = [['daysPresent', 'Days'], ['avgIn', 'Avg in'], ['avgOut', 'Avg out'], ['avgWorked', 'Avg worked'], ['avgBreak', 'Avg break'], ['avgClickup', 'ClickUp / day']];
+type SortKey = 'name' | 'daysPresent' | 'avgIn' | 'avgOut' | 'avgWorked' | 'avgBreak' | 'avgClickup' | 'sets';
+const COLS: [SortKey, string][] = [['daysPresent', 'Days'], ['avgIn', 'Avg in'], ['avgOut', 'Avg out'], ['avgWorked', 'Avg worked'], ['avgBreak', 'Avg break'], ['avgClickup', 'ClickUp / day'], ['sets', 'Sets']];
+const sortVal = (p: PersonWeek, k: Exclude<SortKey, 'name'>) => (k === 'sets' ? (p.setsSummary?.days ? p.setsSummary.total : null) : p[k]);
 
 /** Week-at-a-glance for the weekly meeting: averages per person, from Jibble and ClickUp history */
 export default function WeekReport({ dept, deptColor }: { dept: string; deptColor: Map<string, string> }) {
@@ -46,7 +47,7 @@ export default function WeekReport({ dept, deptColor }: { dept: string; deptColo
     const [k, dir] = sort;
     return [...list].sort((a, b) => {
       if (k === 'name') return a.name.localeCompare(b.name) * dir;
-      const x = a[k] ?? -1, y = b[k] ?? -1; // people with no value sort last
+      const x = sortVal(a, k) ?? -1, y = sortVal(b, k) ?? -1; // people with no value sort last
       return x === y ? a.name.localeCompare(b.name) : (x - y) * dir;
     });
   }, [data, dept, sort]);
@@ -64,6 +65,10 @@ export default function WeekReport({ dept, deptColor }: { dept: string; deptColo
   const coverage = tracked.length ? Math.round((tracked.reduce((t, p) => t + p.totalClickup!, 0) / Math.max(1, tracked.reduce((t, p) => t + p.totalWorked, 0))) * 100) : null;
   const maxDay = Math.max(S.workTargetMin, ...people.flatMap((p) => p.days.map((d) => d?.worked || 0)));
   const csv = `/api/week?${new URLSearchParams({ start: data.weekStart, format: 'csv' })}`;
+  const setsTotal = people.reduce((t, p) => t + (p.setsSummary?.total || 0), 0);
+  const setsDays = people.reduce((t, p) => t + (p.setsSummary?.days || 0), 0);
+  const setsHit = people.reduce((t, p) => t + (p.setsSummary?.hitDays || 0), 0);
+  const setsTarget = people.reduce((t, p) => t + (p.setsSummary?.targetDays || 0), 0);
   const toggleSort = (k: SortKey) => setSort(([ck, dir]) => [k, ck === k ? (dir === 1 ? -1 : 1) : k === 'name' || k === 'avgIn' ? 1 : -1]);
   const arrow = (k: SortKey) => (sort[0] === k ? (sort[1] === 1 ? ' ↑' : ' ↓') : '');
 
@@ -95,6 +100,7 @@ export default function WeekReport({ dept, deptColor }: { dept: string; deptColo
         <div><span>Avg clock-in</span><b>{clock(team((p) => p.avgIn))}</b><small>out {clock(team((p) => p.avgOut))}</small></div>
         <div><span>Avg break / day</span><b>{team((p) => p.avgBreak) !== null ? fm(team((p) => p.avgBreak)!) : '–'}</b><small>allowance {fm(S.breakAllowanceMin)}</small></div>
         {data.clickup && <div><span>ClickUp coverage</span><b>{coverage !== null ? `${coverage}%` : '–'}</b><small>of worked time tracked</small></div>}
+        <div><span>Sets made</span><b>{setsTotal}</b><small>{setsDays ? `${(setsTotal / setsDays).toFixed(1)} per person-day · ${setsHit}/${setsTarget} targets hit` : 'none recorded yet'}</small></div>
         <div><span>People in</span><b>{present.length}</b><small>of {people.length}</small></div>
       </div>
 
@@ -142,6 +148,14 @@ export default function WeekReport({ dept, deptColor }: { dept: string; deptColo
                         </>}
                       </td>
                     )}
+                    <td className="num">
+                      {p.setsSummary?.days ? <>
+                        <b>{p.setsSummary.total}</b>
+                        <small>avg {p.setsSummary.avg}/day</small>
+                        {p.setsSummary.targetDays > 0 && <small className={p.setsSummary.hitDays < p.setsSummary.targetDays ? 'amber' : ''}>{p.setsSummary.hitDays}/{p.setsSummary.targetDays} target hit</small>}
+                        {p.setsSummary.carry > 0 && <small>{p.setsSummary.carry} carried fwd</small>}
+                      </> : <span className="muted">–</span>}
+                    </td>
                     <td>
                       <div className="spark">
                         {p.days.map((d, i) => (
@@ -155,7 +169,7 @@ export default function WeekReport({ dept, deptColor }: { dept: string; deptColo
                   </tr>
                   {isOpen && (
                     <tr className="wdetail">
-                      <td colSpan={data.clickup ? 8 : 7}>
+                      <td colSpan={data.clickup ? 9 : 8}>
                         <Detail p={p} data={data} />
                       </td>
                     </tr>
@@ -179,13 +193,20 @@ const mondayISO = () => {
   return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate() - dow)).toISOString().slice(0, 10);
 };
 
+// "2/3 ✗" for one day of the sets sheet
+function setCell(s: SetDay | undefined) {
+  if (!s || s.madeNum === null || (s.madeNum === 0 && s.target === null && !s.made)) return <span className="muted">–</span>;
+  const txt = s.target !== null ? `${s.madeNum}/${s.target}` : String(s.madeNum);
+  return <span className={s.isHit === false ? 'bad' : ''} title={s.reason || s.autoReason || ''}>{txt}{s.isHit === null ? '' : s.isHit ? ' ✓' : ' ✗'}</span>;
+}
+
 function Detail({ p, data }: { p: PersonWeek; data: Week }) {
   const actMax = Math.max(1, ...p.activities.map((a) => a.minutes));
   const taskMax = Math.max(1, ...p.tasks.map((t) => t.minutes));
   return (
     <div className="wd">
       <table className="dtable">
-        <thead><tr><th>Day</th><th className="num">In</th><th className="num">Out</th><th className="num">Worked</th><th className="num">Break</th>{data.clickup && <th className="num">ClickUp</th>}</tr></thead>
+        <thead><tr><th>Day</th><th className="num">In</th><th className="num">Out</th><th className="num">Worked</th><th className="num">Break</th>{data.clickup && <th className="num">ClickUp</th>}<th className="num">Sets</th></tr></thead>
         <tbody>
           {p.days.map((d, i) => (
             <tr key={i} className={d ? '' : 'absent'}>
@@ -197,6 +218,7 @@ function Detail({ p, data }: { p: PersonWeek; data: Week }) {
                 <td className="num"><span className={d.breaks > data.settings.breakAllowanceMin ? 'amber' : ''}>{fm(d.breaks)}</span></td>
                 {data.clickup && <td className="num">{d.clickup === null ? '–' : fm(d.clickup)}{d.clickupOffClock ? <small className="bad"> −{fm(d.clickupOffClock)}</small> : null}</td>}
               </> : <td colSpan={data.clickup ? 5 : 4} className="muted">Not in</td>}
+              <td className="num">{setCell(p.sets?.[i])}</td>
             </tr>
           ))}
           <tr className="total">
@@ -204,6 +226,7 @@ function Detail({ p, data }: { p: PersonWeek; data: Week }) {
             <td className="num"><b>{fm(p.totalWorked)}</b></td>
             <td className="num">{fm(p.totalBreak)}</td>
             {data.clickup && <td className="num">{p.totalClickup === null ? '–' : fm(p.totalClickup)}{p.totalClickupOffClock ? <small className="bad"> −{fm(p.totalClickupOffClock)}</small> : null}</td>}
+            <td className="num"><b>{p.setsSummary?.days ? p.setsSummary.total : '–'}</b></td>
           </tr>
         </tbody>
       </table>

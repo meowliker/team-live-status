@@ -24,7 +24,7 @@ export const TEAM: Member[] = [
   { name: 'Shakthi', department: 'Media Buyer', clickup: false, aliases: ['shakthi@gividreams.com', 'shakthi.official1@gmail.com'] },
 
   { name: 'Deepti', department: 'Editor', aliases: ['deepti@gividreams.com'] },
-  { name: 'Armaan Ali', department: 'Editor', aliases: ['Arman Ali', 'armaan@gividreams.com'] },
+  { name: 'Armaan Ali', department: 'Editor', aliases: ['Arman Ali', 'Arman', 'armaan@gividreams.com'] },
   { name: 'Pankaj Kumar', department: 'Editor', aliases: ['pankaj@gividreams.com'] },
   { name: 'Tamim Ahmad', department: 'Editor', aliases: ['tamim@gividreams.com'] },
   { name: 'Harish Kumar', department: 'Editor', aliases: ['harish@gividreams.com'] },
@@ -42,6 +42,12 @@ export const TEAM: Member[] = [
   { name: 'Mahesh', department: 'Finance', clickup: false, aliases: ['mahesh@gividreams.com'] },
 
   { name: 'Santushti', department: 'HR', clickup: false, aliases: ['santushti@gividreams.com'] },
+];
+
+// People tracked on the Sets tab (and in the 7 PM missed-target Slack report). Team list names. Empty = everyone.
+export const SETS_TEAM = [
+  'Aryan Dewangan', 'Apurwa', 'Aryan Rathore', 'Pankaj Kumar', 'Nitin', 'Deepti',
+  'Harish Kumar', 'Shivam', 'Armaan Ali', 'Tamim Ahmad', 'Prince Vaishnav',
 ];
 
 // Told on Slack when someone's "Needs attention" problem isn't fixed after a reminder (team list names)

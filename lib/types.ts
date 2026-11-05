@@ -118,6 +118,44 @@ export type WeekDay = {
   tasks: { name: string; url: string | null; minutes: number }[];
 };
 
+/** A ClickUp set (task named with a number) in review/done, counted on the last day the person tracked time on it */
+export type SetTask = { name: string; url: string | null; status: string };
+
+/** One person's row in the sets sheet for one day, as typed (free text, like the old Google Sheet) */
+export type SetRow = {
+  assigned?: string; // "Task assigned": 2, "5 + shoot", "pool", "reworks + 1"
+  made?: string; // "No. of sets" typed by hand; empty = ClickUp count
+  middle?: string; // "Middle OTD set": sets assigned in the middle of the day (added to the target)
+  carry?: string; // "No. of carry forward sets": left over, to be made the next day
+  video?: string; // Ai / Non Ai / 50-50
+  status?: string; // Done / Not done
+  hit?: string; // "yes" / "no" overrides the automatic target check
+  reason?: string; // why the target was missed
+};
+
+/** A day in the sets sheet, with the numbers worked out */
+export type SetDay = SetRow & {
+  date: string;
+  clickup: SetTask[] | null; // sets found in ClickUp (null = not on ClickUp)
+  madeNum: number | null; // typed number, or the ClickUp count
+  target: number | null; // assigned + middle OTD (null = no number assigned, e.g. "pool")
+  carryNum: number | null;
+  autoHit: boolean | null; // made ≥ target (or "Not done")
+  isHit: boolean | null; // after the Yes/No override
+  carriedIn: number | null; // carry forward from the previous day
+  autoReason?: string; // reason worked out from Jibble/ClickUp, used when none is typed (only when missed)
+};
+
+export type SetsSummary = {
+  total: number; // sets made this week
+  days: number; // days with sets recorded
+  avg: number | null; // sets per day
+  targetDays: number; // days with a number assigned
+  hitDays: number;
+  carry: number;
+  video: Record<string, number>;
+};
+
 export type PersonWeek = {
   name: string;
   department: string;
@@ -137,6 +175,11 @@ export type PersonWeek = {
   totalClickupOffClock: number | null;
   activities: { activity: string | null; project: string | null; minutes: number }[];
   tasks: { name: string; url: string | null; minutes: number }[];
+  /** ClickUp sets per date (only for people on ClickUp) */
+  cuSets: Record<string, SetTask[]> | null;
+  /** The sets sheet, one per date (added when the report is sent, so edits show straight away) */
+  sets?: SetDay[];
+  setsSummary?: SetsSummary;
 };
 
 export type WeekReport = {
@@ -151,4 +194,6 @@ export type WeekReport = {
   people: PersonWeek[];
   notFound: string[];
   errors: string[];
+  /** The 7 PM Slack post about missed set targets: when, where, and the dates it was already posted */
+  setsReport?: { time: string; channel: string; on: boolean; sent: Record<string, string> };
 };

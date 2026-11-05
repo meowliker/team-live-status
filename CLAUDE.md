@@ -18,9 +18,11 @@ A single web page that shows a team **live**: who is working, on break, free to 
 |---|---|
 | **Live board** (`/`) | Tiles (Working / In pool / On break / Needs attention / Offline), department filter chips, and panels: **Pool** (people added by hand with **＋ Add to pool**, split by department, with **Assign** and **Remove from pool**), **Needs attention**, **On break**, **Assigned from pool**, **Working now** (with the running ClickUp task), **Offline**, and a **Live feed** of changes. Browser notifications are optional. |
 | **Daily** tab | Any date (Today / Yesterday / ‹ › / date picker). Today is the live report: clock-in/out, worked vs target, ClickUp tracked, breaks vs allowance, missed-break and frozen-screen flags, colour timeline. Past days are rebuilt from Jibble + ClickUp history (no screenshot flags) and each row expands to that day's Jibble activities and ClickUp tasks. **Download CSV** per day. |
+| **Sets** tab | The daily sets sheet (replaces the Google Sheet) for the people in `SETS_TEAM` (`team.config.ts`): per person Task assigned, No. of sets, Middle OTD, Carry forward, Video (Ai / Non Ai / 50-50), Status, Target hit (auto, with Yes/No override) and Reason. Everyone can edit; saved per cell. Empty "No. of sets" = ClickUp count. Tiles, Slack-message preview, **Import sheet** (CSV), **CSV** per day. Full width (no live feed). |
 | **Weekly** tab | Pick a week (This week / Last week / ‹ ›). Team averages, then per person: days in, avg clock-in/out, avg worked per day and days on target, avg break and days over allowance, ClickUp per day and coverage, and a bar per day. Click a row for day-by-day numbers, Jibble activities and top ClickUp tasks. **Download CSV** and **Print**. |
 | **Person panel** | Click any name or avatar: their day, timeline, time per Jibble activity + project, and time per ClickUp task. |
 | **Slack** (optional) | DMs for *Needs attention* (reminder + managers after `SLACK_REMIND_MINUTES`, "✅ Sorted" when fixed) and pool posts in `SLACK_POOL_CHANNEL` with @here, with "✅ Assigned by …" in the thread. |
+| **Slack 7 PM report** | At `SETS_REPORT_TIME` (19:00) one post in `SETS_REPORT_CHANNEL` (#creatives) listing who missed their set target and why; nothing when everyone hit it. |
 | **Settings** (`/settings`) | Link each team member to a Jibble person and a ClickUp member by hand (overrides auto matching), or mark them "Not on ClickUp". Lists unlinked Jibble/ClickUp accounts. Warns if data would be wiped on redeploy. |
 
 ## Tech stack
@@ -44,6 +46,8 @@ lib/
   clickup.ts            ← ClickUp API client: members, today's timers (+ running timer per person), ranges
   week.ts               ← Week/day history builder (a week of Jibble + ClickUp history) + weekly and daily CSV
   overlap.ts            ← Removes ClickUp time that ran off the clock (Jibble breaks, after clock-out)
+  sets.ts               ← Sets sheet: sets.json storage, target maths, weekly totals, CSV import/export, 7 PM Slack report
+  store.ts              ← readJson / writeJson for the small JSON files in DATA_DIR
   alerts.ts             ← Slack rules: Needs-attention DMs, reminders, manager messages, pool channel posts
   slack.ts              ← Slack Web API client (bot token): find users by email, DM, post, thread replies
   time.ts               ← Timezone-aware date helpers (team timezone, not server/browser timezone)
@@ -54,12 +58,15 @@ app/
   PersonPanel.tsx       ← Side panel opened by clicking a name
   WeekReport.tsx        ← Weekly tab UI
   DailyReport.tsx       ← Daily tab: date navigation; today = live report, past days from /api/week
+  SetsSheet.tsx         ← Sets tab: the editable daily sheet (reads /api/week, saves to /api/sets)
   format.ts             ← Display helpers (durations, times, initials, avatar gradients)
   settings/             ← Settings page (Jibble/ClickUp linking)
   api/state             ← GET: full board state
   api/action            ← POST: refresh | pick | release | mode (free/busy/auto)
   api/settings          ← GET/POST: manual Jibble/ClickUp links
-  api/week              ← GET ?start=YYYY-MM-DD [&format=csv [&day=YYYY-MM-DD]] [&fresh=1]: weekly report, or one day's CSV
+  api/week              ← GET ?start=YYYY-MM-DD [&format=csv [&day=YYYY-MM-DD]] [&fresh=1]: weekly report, or one day's CSV (sets sheet attached per person)
+  api/sets              ← POST {date,name,field,value}: save one cell · GET ?date=&format=csv: day sheet CSV · GET ?date=&preview=1: Slack text
+  api/sets/import       ← POST CSV text: import the old Google Sheet
 ```
 
 ## How it works
@@ -86,6 +93,10 @@ app/
 - **Jibble "tasks"** = the activity and project picked at clock-in. Each `In` entry starts a work segment carrying that activity/project.
 - **Slack, Needs attention:** one DM per problem (blank screen, frozen screen, no screenshots, ClickUp timer on break, ClickUp timer after clock-out). If still there `SLACK_REMIND_MINUTES` (10) after the DM: a reminder in the thread, and a DM to each name in `SLACK_MANAGERS` (`team.config.ts`; currently Apurwa), never about their own alert. When it clears: "✅ Sorted" in the threads, and no new message about the same thing for 15 min.
 - **Slack, pool:** when someone joins the pool, a post in `SLACK_POOL_CHANNEL` (default `#creatives`) with `@here` (or `@channel` if `SLACK_POOL_MENTION=channel`), not individual tags. If they're still in the pool after `POOL_IDLE_ALERT_MINUTES` (15), one reminder in the thread with the same mention. When they leave the pool, a thread reply says why (assigned by X, clocked out, or removed).
+- **Sets:** a ClickUp task whose name starts with a number (`SET_TASK_PATTERN`, e.g. "14588", "14589/14410/1") is one set. It counts once its status contains one of `SET_DONE_STATUSES` (review, done, complete, closed, approved), on the **last day the person tracked time on it** (ClickUp is read up to a week past the report week, so a set finished next week isn't counted twice). The status is the task's current status. A typed "No. of sets" always wins over the ClickUp count.
+- **Sets targets:** cells are free text like the old sheet; the number is the sum of the numbers outside brackets ("5 + shoot" = 5, "1 + 1 ai automation" = 2, "reworks + 1 (4 sets in 1)" = 1, "pool" = none). **Target = Task assigned + Middle OTD.** Target hit = sets made ≥ target, or No when Status is "Not done"; the Target hit dropdown overrides it. Carry forward is typed (the placeholder suggests target − made); the next day shows "+N carried from last day".
+- **Slack, sets report:** once a day after `SETS_REPORT_TIME` (team timezone) a single post in `SETS_REPORT_CHANNEL` lists each person whose target hit is No: "completed X of Y sets; N carried forward", and the typed Reason, or one worked out from Jibble/ClickUp (mid-day sets, shoot/meeting time, pool time, research, short hours, long breaks). Nothing is posted if everyone hit it. The day is marked in `sets.json` (`reported`) so it's never posted twice, even after a restart; edits after the post don't re-post.
+- Module state that both the API routes and the 7 PM timer use (`sets.json` contents, the week cache) lives on `globalThis`, because Next loads modules separately for `instrumentation.ts` and the routes.
 - People are found in Slack by their Jibble email, or the `slack` email on their `team.config.ts` line. Slack state (open alerts, pool posts) is saved to `alerts.json` so a restart doesn't send duplicates.
 
 ### Matching people (Jibble ↔ roster ↔ ClickUp)
@@ -107,6 +118,7 @@ There is **no database**. Everything comes live from Jibble and ClickUp and is h
 | `alerts.json` | Open Slack alerts and pool posts (so a restart doesn't re-send) |
 | `pool.json` | Free/Busy modes and who assigned whom from the pool |
 | `shots.json` | Today's analysed screenshots, so a restart doesn't re-download them |
+| `sets.json` | The sets sheet (per date, per roster name) and the dates the 7 PM Slack report was posted |
 
 - `DATA_DIR` defaults to the Railway volume (`RAILWAY_VOLUME_MOUNT_PATH`) when one is attached, otherwise `.data/`.
 - **On Railway, attach a Volume** or these files are wiped on every deploy. The Settings page shows a red warning if they aren't on a volume.
@@ -137,6 +149,10 @@ See `.env.example`. **Never commit real keys.** `.env` is gitignored, and on Rai
 | `SLACK_POOL_CHANNEL` | Channel for pool posts (default `#creatives`; the bot must be invited). Empty = no pool posts |
 | `SLACK_POOL_MENTION` | `here` (default): pool posts use @here; `channel`: @channel |
 | `SLACK_REMIND_MINUTES` | Minutes before the reminder + manager message (default 10) |
+| `SETS_REPORT_TIME` | When the missed-target Slack post goes out, team timezone HH:MM (default `19:00`; empty = off) |
+| `SETS_REPORT_CHANNEL` | Where it goes (default `SLACK_POOL_CHANNEL`, i.e. `#creatives`) |
+| `SET_TASK_PATTERN` | Regex for ClickUp task names that are sets (default `^\s*\d`: starts with a number) |
+| `SET_DONE_STATUSES` | Comma-separated status words that count a set as made (default `review,done,complete,closed,approved`) |
 | `SLACK_DRY_RUN` | `on` logs Slack messages instead of sending (always on in demo mode) |
 | `MOCK=1` | Demo mode with fake data, no keys needed |
 
@@ -167,6 +183,7 @@ npx tsc --noEmit             # typecheck (there is no test suite or linter confi
 | Fix someone not found or not linked | Settings page (no deploy needed, but needs the volume), or an alias in `team.config.ts` |
 | Change thresholds or timezone | Environment variables on Railway (no code change) |
 | Change the look | `app/globals.css`: colour tokens at the top (`:root` and the light-mode block) |
+| Change who's on the Sets tab | `SETS_TEAM` in `team.config.ts` (team list names; empty = everyone). Also limits the Weekly sets column and the 7 PM report. |
 | Change who's told on Slack | `SLACK_MANAGERS` (escalations) in `team.config.ts`, `SLACK_POOL_MENTION` (pool posts) on Railway; message wording in `lib/alerts.ts` |
 
 ## Decisions and gotchas
@@ -195,6 +212,7 @@ npx tsc --noEmit             # typecheck (there is no test suite or linter confi
 11. Pool membership survives breaks and paused timers; 1-minute grace before flagging a timer left running off the clock.
 12. Pool posts use @here instead of tagging people one by one.
 13. A ClickUp timer on a shoot / meeting / explaining-task task pauses the screen checks and their Slack messages (`QUIET_TASK_WORDS`).
+14. Sets tab (daily sets sheet, ClickUp set counting, Google Sheet import), sets on the Weekly tab and CSV, and the 7 PM missed-target Slack report.
 
 ## Ideas not built yet
 

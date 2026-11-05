@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import { TEAM, DEPARTMENTS, type Member } from '../team.config';
 import { CONFIG, clickupOn, jibbleOn } from './config';
@@ -8,6 +7,7 @@ import * as mock from './mock';
 import { startOfToday, todayStr } from './time';
 import { offClockSpans, removeOffClockTime } from './overlap';
 import { SlackAlerts } from './alerts';
+import { readJson, writeJson } from './store';
 import type { ActivityTime, BoardEvent, BoardState, ClickupMember, DayReport, JibbleEntry, JibblePerson, Mapping, Overlay, PersonRow, Segment, SettingsState, Shot, TimerInfo } from './types';
 
 const norm = (n: string | null | undefined) => (n || '').toLowerCase().replace(/[^a-z0-9@. ]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -16,17 +16,6 @@ const ms = (a: string, b: string) => new Date(b).getTime() - new Date(a).getTime
 // ───────────────────────── persisted state ─────────────────────────
 // viaTimer: joined by running a ClickUp timer on a Pool task (they leave when they start a timer on another task)
 type Pool = { modes: Record<string, 'free' | 'busy'>; picks: Record<string, { by: string; at: string }>; viaTimer?: Record<string, true> };
-const file = (n: string) => path.join(CONFIG.dataDir, n);
-const readJson = <T,>(n: string, d: T): T => {
-  try { return JSON.parse(fs.readFileSync(file(n), 'utf8')); } catch { return d; }
-};
-const writeJson = (n: string, v: unknown) => {
-  try {
-    fs.mkdirSync(CONFIG.dataDir, { recursive: true });
-    fs.writeFileSync(file(n), JSON.stringify(v));
-  } catch (e) { console.warn(`could not save ${n}: ${(e as Error).message}`); }
-};
-
 // ClickUp tasks during which the screen isn't watched (shoots, meetings, explaining a task)
 const quietTaskRe = CONFIG.quietTaskWords.length
   ? new RegExp(CONFIG.quietTaskWords.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'i') : null;
