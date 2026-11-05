@@ -1,6 +1,6 @@
 // The sets sheet: what each person was assigned and made per day (typed on the Sets tab, or counted from
 // ClickUp), weekly totals, importing the old Google Sheet, and the 7 PM Slack post about missed targets.
-import { TEAM } from '../team.config';
+import { SETS_TEAM, TEAM } from '../team.config';
 import { CONFIG } from './config';
 import { engine, isQuietTask } from './engine';
 import * as slack from './slack';
@@ -8,6 +8,9 @@ import { readJson, writeJson } from './store';
 import { addDays, todayStr } from './time';
 import { getWeek } from './week';
 import type { PersonWeek, SetDay, SetRow, SetsSummary, SetTask, WeekDay, WeekReport } from './types';
+
+/** On the Sets tab: the names in SETS_TEAM (team.config.ts), or everyone if it's empty */
+export const onSets = (name: string) => !SETS_TEAM.length || SETS_TEAM.includes(name);
 
 // ───────────────────────── storage (sets.json) ─────────────────────────
 type SetsFile = { days: Record<string, Record<string, SetRow>>; reported: Record<string, string> };
@@ -83,6 +86,7 @@ export function withSets(w: WeekReport): WeekReport {
     ...w,
     setsReport: { time: CONFIG.setsReportTime, channel: CONFIG.setsReportChannel, on: slack.slackOn() && !!CONFIG.setsReportTime && !!CONFIG.setsReportChannel, sent: Object.fromEntries(w.dates.filter((d) => load().reported[d]).map((d) => [d, load().reported[d]])) },
     people: w.people.map((p) => {
+      if (!onSets(p.name)) return p;
       const sets = w.dates.map((d, i) => {
         const s = dayOf(d, p.name, p.cuSets ? p.cuSets[d] || [] : null);
         return s.isHit === false ? { ...s, autoReason: sentence(autoReason(p.days[i], s)) || undefined } : s;
@@ -123,7 +127,7 @@ function autoReason(d: WeekDay | null, s: SetDay): string {
 export async function reportText(date: string, fresh = true): Promise<{ text: string; missed: string[] } | null> {
   const w = withSets(await getWeek(date, fresh));
   const i = w.dates.indexOf(date);
-  const missed = w.people.map((p) => ({ p, s: p.sets![i], d: p.days[i] })).filter(({ s }) => s.isHit === false);
+  const missed = w.people.filter((p) => p.sets).map((p) => ({ p, s: p.sets![i], d: p.days[i] })).filter(({ s }) => s.isHit === false);
   if (!missed.length) return null;
   const when = new Date(date + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
   const lines = missed.map(({ p, s, d }) => {
@@ -194,7 +198,7 @@ const hitText = (s: SetDay) => (s.isHit === null ? '' : s.isHit ? 'Yes' : 'No');
 export function setsDayCsv(w: WeekReport, date: string) {
   const i = w.dates.indexOf(date);
   const head = ['Date', 'Name', 'Department', 'Task assigned', 'No. of sets', 'Sets from ClickUp', 'Middle OTD set', 'No. of carry forward sets', 'Video', 'Status', 'Target', 'Target hit', 'Reason'];
-  const rows = w.people.map((p) => {
+  const rows = w.people.filter((p) => p.sets).map((p) => {
     const s = p.sets![i];
     return [date, p.name, p.department, s.assigned, s.made ?? (s.clickup ? s.clickup.length : ''), s.clickup?.map((t) => t.name).join('; '), s.middle, s.carry, s.video, s.status, s.target, hitText(s), s.reason];
   });
@@ -246,15 +250,16 @@ export function parseDate(s: string, today = todayStr()): string | null {
   return iso(ty) > addDays(today, 1) ? iso(ty - 1) : iso(ty);
 }
 
-/** Roster name for a name in the sheet: full name, alias, or a unique first name ("pankaj" → "Pankaj …") */
+/** Name on the sets list for a name in the sheet: full name, alias, or a unique first name ("pankaj" → "Pankaj …") */
 function rosterName(n: string): string | null {
   const t = n.trim().toLowerCase();
   if (!t) return null;
-  const exact = TEAM.find((m) => m.name.toLowerCase() === t || (m.aliases || []).some((a) => a.toLowerCase() === t));
+  const TEAM_ = TEAM.filter((m) => onSets(m.name));
+  const exact = TEAM_.find((m) => m.name.toLowerCase() === t || (m.aliases || []).some((a) => a.toLowerCase() === t));
   if (exact) return exact.name;
-  const first = TEAM.filter((m) => m.name.toLowerCase().split(' ')[0] === t.split(' ')[0]);
+  const first = TEAM_.filter((m) => m.name.toLowerCase().split(' ')[0] === t.split(' ')[0]);
   if (first.length === 1) return first[0].name;
-  const starts = TEAM.filter((m) => m.name.toLowerCase().startsWith(t) || t.startsWith(m.name.toLowerCase()));
+  const starts = TEAM_.filter((m) => m.name.toLowerCase().startsWith(t) || t.startsWith(m.name.toLowerCase()));
   return starts.length === 1 ? starts[0].name : null;
 }
 

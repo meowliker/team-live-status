@@ -58,7 +58,7 @@ export default function SetsSheet({ dept, deptColor, timezone }: { dept: string;
     if (!r.ok) return setMsg({ kind: 'err', text: `Import failed: ${d.error || r.status}` });
     setMsg({
       kind: d.unknown?.length ? 'warn' : 'info',
-      text: `Imported ${d.imported} rows over ${d.days} days${d.from ? ` (${d.from} to ${d.to})` : ''}.${d.unknown?.length ? ` Not on the team list, so skipped: ${d.unknown.join(', ')}.` : ''}`,
+      text: `Imported ${d.imported} rows over ${d.days} days${d.from ? ` (${d.from} to ${d.to})` : ''}.${d.unknown?.length ? ` Not on the sets list, so skipped: ${d.unknown.join(', ')}.` : ''}`,
     });
     load();
   };
@@ -71,7 +71,7 @@ export default function SetsSheet({ dept, deptColor, timezone }: { dept: string;
 
   const i = data ? data.dates.indexOf(date) : -1;
   const people: { p: PersonWeek; s: SetDay }[] = data && i >= 0
-    ? data.people.filter((p) => dept === 'All' || p.department === dept).map((p) => ({ p, s: p.sets![i] }))
+    ? data.people.filter((p) => p.sets && (dept === 'All' || p.department === dept)).map((p) => ({ p, s: p.sets![i] }))
     : [];
   const withTarget = people.filter(({ s }) => s.target !== null);
   const hit = withTarget.filter(({ s }) => s.isHit === true).length;
@@ -135,6 +135,7 @@ export default function SetsSheet({ dept, deptColor, timezone }: { dept: string;
               </thead>
               <tbody>
                 {people.map(({ p, s }) => <Row key={p.name} p={p} s={s} color={deptColor.get(p.department) || DEPT_COLORS[0]} save={(f, v) => save(p.name, f, v)} />)}
+                {!people.length && <tr><td colSpan={9} className="muted">Nobody {dept === 'All' ? '' : `in ${dept} `}is on the sets list (SETS_TEAM in team.config.ts).</td></tr>}
               </tbody>
             </table>
           </div>

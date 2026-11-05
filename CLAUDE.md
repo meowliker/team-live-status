@@ -18,7 +18,7 @@ A single web page that shows a team **live**: who is working, on break, free to 
 |---|---|
 | **Live board** (`/`) | Tiles (Working / In pool / On break / Needs attention / Offline), department filter chips, and panels: **Pool** (people added by hand with **＋ Add to pool**, split by department, with **Assign** and **Remove from pool**), **Needs attention**, **On break**, **Assigned from pool**, **Working now** (with the running ClickUp task), **Offline**, and a **Live feed** of changes. Browser notifications are optional. |
 | **Daily** tab | Any date (Today / Yesterday / ‹ › / date picker). Today is the live report: clock-in/out, worked vs target, ClickUp tracked, breaks vs allowance, missed-break and frozen-screen flags, colour timeline. Past days are rebuilt from Jibble + ClickUp history (no screenshot flags) and each row expands to that day's Jibble activities and ClickUp tasks. **Download CSV** per day. |
-| **Sets** tab | The daily sets sheet (replaces the Google Sheet): per person Task assigned, No. of sets, Middle OTD, Carry forward, Video (Ai / Non Ai / 50-50), Status, Target hit (auto, with Yes/No override) and Reason. Everyone can edit; saved per cell. Empty "No. of sets" = ClickUp count. Tiles, Slack-message preview, **Import sheet** (CSV), **CSV** per day. Full width (no live feed). |
+| **Sets** tab | The daily sets sheet (replaces the Google Sheet) for the people in `SETS_TEAM` (`team.config.ts`): per person Task assigned, No. of sets, Middle OTD, Carry forward, Video (Ai / Non Ai / 50-50), Status, Target hit (auto, with Yes/No override) and Reason. Everyone can edit; saved per cell. Empty "No. of sets" = ClickUp count. Tiles, Slack-message preview, **Import sheet** (CSV), **CSV** per day. Full width (no live feed). |
 | **Weekly** tab | Pick a week (This week / Last week / ‹ ›). Team averages, then per person: days in, avg clock-in/out, avg worked per day and days on target, avg break and days over allowance, ClickUp per day and coverage, and a bar per day. Click a row for day-by-day numbers, Jibble activities and top ClickUp tasks. **Download CSV** and **Print**. |
 | **Person panel** | Click any name or avatar: their day, timeline, time per Jibble activity + project, and time per ClickUp task. |
 | **Slack** (optional) | DMs for *Needs attention* (reminder + managers after `SLACK_REMIND_MINUTES`, "✅ Sorted" when fixed) and pool posts in `SLACK_POOL_CHANNEL` with @here, with "✅ Assigned by …" in the thread. |
@@ -183,6 +183,7 @@ npx tsc --noEmit             # typecheck (there is no test suite or linter confi
 | Fix someone not found or not linked | Settings page (no deploy needed, but needs the volume), or an alias in `team.config.ts` |
 | Change thresholds or timezone | Environment variables on Railway (no code change) |
 | Change the look | `app/globals.css`: colour tokens at the top (`:root` and the light-mode block) |
+| Change who's on the Sets tab | `SETS_TEAM` in `team.config.ts` (team list names; empty = everyone). Also limits the Weekly sets column and the 7 PM report. |
 | Change who's told on Slack | `SLACK_MANAGERS` (escalations) in `team.config.ts`, `SLACK_POOL_MENTION` (pool posts) on Railway; message wording in `lib/alerts.ts` |
 
 ## Decisions and gotchas
