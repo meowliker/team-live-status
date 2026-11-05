@@ -41,6 +41,13 @@ export const CONFIG = {
   slackPoolChannel: (process.env.SLACK_POOL_CHANNEL ?? '#creatives').trim(),
   // Who a pool post notifies: "here" = @here (everyone active in the channel), "channel" = @channel (everyone in it)
   slackPoolMention: (process.env.SLACK_POOL_MENTION || 'here').trim().toLowerCase() === 'channel' ? '<!channel>' : '<!here>',
+  // Sets: a ClickUp task whose name starts with a number (e.g. "14588", "14589/14410/1") is one set. It counts
+  // for the day the person last tracked time on it, once its status contains one of SET_DONE_STATUSES
+  setTaskPattern: process.env.SET_TASK_PATTERN || '^\\s*\\d',
+  setDoneStatuses: (process.env.SET_DONE_STATUSES ?? 'review,done,complete,closed,approved').split(',').map((w) => w.trim().toLowerCase()).filter(Boolean),
+  // Evening Slack post listing who missed their set target (team timezone, HH:MM). Empty = off
+  setsReportTime: (process.env.SETS_REPORT_TIME ?? '19:00').trim(),
+  setsReportChannel: (process.env.SETS_REPORT_CHANNEL ?? process.env.SLACK_POOL_CHANNEL ?? '#creatives').trim(),
   // Log the messages instead of sending them (always on in demo mode)
   slackDryRun: on(process.env.SLACK_DRY_RUN, false) || on(process.env.MOCK, false),
 };

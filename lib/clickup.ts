@@ -136,3 +136,9 @@ export const entryTask = (e: any) => {
   return { name: t.task, url: t.url };
 };
 
+/** Task id, name, link and current status of a ClickUp time entry (for counting sets) */
+export const entrySetTask = (e: any) => {
+  const task = e.task && typeof e.task === 'object' ? e.task : null;
+  const t = toTimer(e);
+  return { id: task?.id ? String(task.id) : null, name: t.task, url: t.url, status: String(task?.status?.status || ''), statusType: String(task?.status?.type || '') };
+};

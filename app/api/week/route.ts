@@ -1,4 +1,5 @@
 import { dayCsv, getWeek, weekCsv } from '@/lib/week';
+import { withSets } from '@/lib/sets';
 import { mondayOf, todayStr } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
@@ -12,7 +13,7 @@ export async function GET(req: Request) {
   const week = mondayOf(start || todayStr());
   if (week > mondayOf(todayStr())) return Response.json({ error: 'That week hasn’t started yet' }, { status: 400 });
   try {
-    const data = await getWeek(week, url.searchParams.get('fresh') === '1');
+    const data = withSets(await getWeek(week, url.searchParams.get('fresh') === '1'));
     if (url.searchParams.get('format') === 'csv') {
       const day = url.searchParams.get('day');
       const one = day && data.dates.includes(day) ? day : null;

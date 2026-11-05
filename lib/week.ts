@@ -4,11 +4,13 @@ import * as jibble from './jibble';
 import * as clickup from './clickup';
 import * as mock from './mock';
 import { addDays, mondayOf, startOfDay, todayStr } from './time';
-import type { ClickupSpan, JibbleEntry, PersonWeek, Segment, WeekDay, WeekReport } from './types';
+import type { ClickupSpan, JibbleEntry, PersonWeek, Segment, SetTask, WeekDay, WeekReport } from './types';
 import { offClockSpans, removeOffClockTime } from './overlap';
 
 // Past weeks don't change, so keep them for an hour; the current week for 5 minutes
-const cache = new Map<string, { at: number; ttl: number; data: Promise<WeekReport> }>();
+// (on globalThis so the API routes and the 7 PM sets report share it)
+const gw = globalThis as unknown as { __weekCache?: Map<string, { at: number; ttl: number; data: Promise<WeekReport> }> };
+const cache = (gw.__weekCache ??= new Map());
 
 export function getWeek(weekStart: string, fresh = false) {
   const start = mondayOf(weekStart);
@@ -21,6 +23,9 @@ export function getWeek(weekStart: string, fresh = false) {
   return data;
 }
 
+const safeRe = (src: string) => {
+  try { return new RegExp(src, 'i'); } catch { return /^\s*\d/; }
+};
 const avg = (xs: number[]) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null);
 
 async function buildWeek(weekStart: string): Promise<WeekReport> {
@@ -41,7 +46,9 @@ async function buildWeek(weekStart: string): Promise<WeekReport> {
     (async () => {
       if (!clickupOn() || !cuIds.length || from >= to) return null;
       try {
-        return CONFIG.mock ? await mock.getClickupEntriesBetween(startOfDay(weekStart).getTime(), to) : await clickup.getEntriesBetween(startOfDay(weekStart).getTime(), to, cuIds);
+        // a week past the end too, so a set finished next week isn't counted in this one
+        const cuTo = Math.min(now, startOfDay(addDays(weekStart, 14)).getTime());
+        return CONFIG.mock ? await mock.getClickupEntriesBetween(startOfDay(weekStart).getTime(), cuTo) : await clickup.getEntriesBetween(startOfDay(weekStart).getTime(), cuTo, cuIds);
       } catch (err) {
         errors.push(`ClickUp: ${(err as Error).message}`);
         return null;
@@ -63,6 +70,25 @@ async function buildWeek(weekStart: string): Promise<WeekReport> {
     const t = clickup.entryTask(x);
     cuSpans.get(key)!.push({ from: start, to: end, task: t.name, url: t.url });
   }
+
+  // Sets: tasks named with a number, in review/done, counted on the last day each person tracked time on them
+  const setRe = safeRe(CONFIG.setTaskPattern);
+  const doneSet = (status: string, type: string) => ['done', 'closed'].includes(type.toLowerCase()) || CONFIG.setDoneStatuses.some((w) => status.toLowerCase().includes(w));
+  const lastTouch = new Map<number, Map<string, SetTask & { date: string }>>();
+  for (const x of cuEntries || []) {
+    const uid = Number(x.user?.id);
+    const t = clickup.entrySetTask(x);
+    if (!uid || !t.id || !setRe.test(t.name) || !doneSet(t.status, t.statusType)) continue;
+    const date = todayStr(new Date(Number(x.start)));
+    if (!lastTouch.has(uid)) lastTouch.set(uid, new Map());
+    const cur = lastTouch.get(uid)!.get(t.id);
+    if (!cur || date > cur.date) lastTouch.get(uid)!.set(t.id, { name: t.name, url: t.url, status: t.status, date });
+  }
+  const setsOf = (uid: number) => {
+    const out: Record<string, SetTask[]> = Object.fromEntries(dates.map((d) => [d, [] as SetTask[]]));
+    for (const { date, ...t } of lastTouch.get(uid)?.values() || []) if (out[date]) out[date].push(t);
+    return out;
+  };
 
   const byPerson = new Map<string, JibbleEntry[]>();
   for (const x of entries) {
@@ -147,6 +173,7 @@ async function buildWeek(weekStart: string): Promise<WeekReport> {
       totalClickupOffClock: useCu ? sum((d) => d.clickupOffClock || 0) : null,
       activities: merge(present.flatMap((d) => d.activities), (a) => `${a.activity || ''}\u0000${a.project || ''}`),
       tasks: useCu ? merge(present.flatMap((d) => d.tasks), (t) => t.name).slice(0, 10) : [],
+      cuSets: useCu ? setsOf(cu!.id) : null,
     };
   });
 
@@ -182,12 +209,15 @@ export function weekCsv(w: WeekReport) {
     'Name', 'Department', 'Days in', 'Avg clock-in', 'Avg clock-out', 'Avg worked / day', 'Total worked', `Days ≥ ${hmm(w.settings.workTargetMin)}`,
     'Avg break / day', 'Total break', `Days over ${hmm(w.settings.breakAllowanceMin)} break`, 'Avg ClickUp / day', 'Total ClickUp', 'ClickUp removed (ran on break or after clock-out)',
     ...dayNames.map((d) => `Worked ${d}`), 'Top Jibble activity', 'Top ClickUp task',
+    'Sets made', 'Avg sets / day', 'Days target hit', 'Carry forward sets', ...dayNames.map((d) => `Sets ${d}`),
   ];
   return csv([head, ...w.people.map((p) => [
     p.name, p.department, p.daysPresent, hmm(p.avgIn), hmm(p.avgOut), hmm(p.avgWorked), hmm(p.totalWorked), p.daysOnTarget,
     hmm(p.avgBreak), hmm(p.totalBreak), p.daysOverBreak, hmm(p.avgClickup), hmm(p.totalClickup), hmm(p.totalClickupOffClock),
     ...p.days.map((d) => (d ? hmm(d.worked) : '')),
     topActivity(p.activities[0]), p.tasks[0]?.name || '',
+    p.setsSummary?.total ?? '', p.setsSummary?.avg ?? '', p.setsSummary ? `${p.setsSummary.hitDays}/${p.setsSummary.targetDays}` : '', p.setsSummary?.carry ?? '',
+    ...(p.sets || []).map((s) => (s.madeNum === null ? '' : s.target !== null ? `${s.madeNum}/${s.target}` : s.madeNum)),
   ])]);
 }
 

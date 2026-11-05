@@ -138,8 +138,11 @@ export async function getClickupEntriesBetween(startMs: number, endMs: number): 
       const [t0, t1, t2, t3] = dayPlan(i, date);
       // every third person forgets to stop their timer for the break; some leave it running after clock-out
       [[t0 + 10 * 60e3, t1 + (i % 3 === 0 ? 20 : -5) * 60e3], [t2 + 5 * 60e3, i % 4 === 1 ? t3 + 30 * 60e3 : t3 - (20 + rnd(i, date, 'gap') * 60) * 60e3]].forEach(([a, b], k) => {
-        const name = tasks[(i + k + Math.floor(rnd(i, date, 't') * 4)) % tasks.length];
-        out.push({ id: `${i}-${date}-${k}`, user: { id: 1000 + i }, start: String(a), end: String(b), duration: String(b - a), task: { id: `t${name.length}`, name } });
+        // most work is on sets: tasks named with a number, a few still in progress
+        const isSet = rnd(i, date, `s${k}`) < 0.7;
+        const name = isSet ? String(14500 + ((i * 37 + Number(date.slice(8)) * 5 + k) % 300)) : tasks[(i + k + Math.floor(rnd(i, date, 't') * 4)) % tasks.length];
+        const status = isSet ? (rnd(i, date, `st${k}`) < 0.75 ? (k ? 'review' : 'done') : 'in progress') : 'in progress';
+        out.push({ id: `${i}-${date}-${k}`, user: { id: 1000 + i }, start: String(a), end: String(b), duration: String(b - a), task: { id: isSet ? `s${name}` : `t${name.length}`, name, status: { status, type: status === 'done' ? 'done' : 'custom' } } });
       });
     });
   }

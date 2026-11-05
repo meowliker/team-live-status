@@ -6,6 +6,7 @@ import { DEPT_COLORS, ago, dur, fm, hm, initials, mins, offLabel, reasonText } f
 import PersonPanel from './PersonPanel';
 import WeekReport from './WeekReport';
 import DailyReport from './DailyReport';
+import SetsSheet from './SetsSheet';
 
 
 type Filter = 'all' | 'working' | 'pool' | 'break' | 'attention' | 'out';
@@ -14,7 +15,7 @@ export default function Board() {
   const [data, setData] = useState<BoardState | null>(null);
   const [failed, setFailed] = useState(false);
   const [, setTick] = useState(0);
-  const [tab, setTab] = useState<'live' | 'day' | 'week'>('live');
+  const [tab, setTab] = useState<'live' | 'day' | 'sets' | 'week'>('live');
   const [dept, setDept] = useState('All');
   const [filter, setFilter] = useState<Filter>('all');
   const [me, setMe] = useState('');
@@ -27,7 +28,7 @@ export default function Board() {
     try {
       setMe(localStorage.getItem('me') || '');
       setDept(localStorage.getItem('dept') || 'All');
-      setTab((localStorage.getItem('tab') as 'live' | 'day' | 'week') || 'live');
+      setTab((localStorage.getItem('tab') as 'live' | 'day' | 'sets' | 'week') || 'live');
     } catch {}
     setAlerts(typeof Notification === 'undefined' ? 'unsupported' : Notification.permission);
   }, []);
@@ -189,6 +190,7 @@ export default function Board() {
           <div className="tabs">
             <button className={tab === 'live' ? 'on' : ''} onClick={() => { setTab('live'); remember('tab', 'live'); }}>Live board</button>
             <button className={tab === 'day' ? 'on' : ''} onClick={() => { setTab('day'); remember('tab', 'day'); }}>Daily</button>
+            <button className={tab === 'sets' ? 'on' : ''} onClick={() => { setTab('sets'); remember('tab', 'sets'); }}>Sets</button>
             <button className={tab === 'week' ? 'on' : ''} onClick={() => { setTab('week'); remember('tab', 'week'); }}>Weekly</button>
           </div>
           <div className="grow" />
@@ -228,10 +230,12 @@ export default function Board() {
           })}
         </div>
 
-        <div className="layout">
+        <div className={`layout ${tab === 'sets' ? 'full' : ''}`}>
           <div>
             {tab === 'week' ? (
               <WeekReport dept={dept} deptColor={deptColor} />
+            ) : tab === 'sets' ? (
+              <SetsSheet dept={dept} deptColor={deptColor} timezone={data.timezone} />
             ) : tab === 'day' ? (
               <DailyReport dept={dept} deptColor={deptColor} timezone={data.timezone} today={<DayReport people={P} data={data} deptColor={deptColor} onOpen={setOpenId} />} />
             ) : (
@@ -325,7 +329,7 @@ export default function Board() {
             )}
           </div>
 
-          <aside className="panel feed">
+          {tab !== 'sets' && <aside className="panel feed">
             <div className="ph"><h2>Live feed</h2></div>
             {data.events.length ? data.events.map((e, i) => (
               <div className="ev" key={i} style={{ ['--c' as string]: `var(--${{ working: 'work', break: 'break', out: 'out', pool: 'pool', pick: 'picked', alert: 'alert', timer: 'work' }[e.kind] || 'muted'})` }}>
@@ -333,7 +337,7 @@ export default function Board() {
                 <div><b>{e.name}</b> {e.text}<div className="t">{ago(e.time)}</div></div>
               </div>
             )) : <div className="empty">Changes show up here as they happen.</div>}
-          </aside>
+          </aside>}
         </div>
       </div>
       {openPerson && <PersonPanel p={openPerson} data={data} color={deptColor.get(openPerson.department) || DEPT_COLORS[0]} onClose={closePanel} />}
