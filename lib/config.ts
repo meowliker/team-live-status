@@ -50,6 +50,10 @@ export const CONFIG = {
   setsReportChannel: (process.env.SETS_REPORT_CHANNEL ?? process.env.SLACK_POOL_CHANNEL ?? '#creatives').trim(),
   // Points: everyone starts each month on POINTS_START and loses 1 point per problem (see lib/points.ts)
   pointsStart: num(process.env.POINTS_START, 100),
+  // When yesterday's ClickUp rules (behind / added by hand) are checked, team time HH:MM
+  pointsCheckTime: (process.env.POINTS_CHECK_TIME || '09:00').trim(),
+  // Link to the app in Slack messages
+  appUrl: (process.env.APP_URL || 'https://team-live-status-production.up.railway.app').trim().replace(/\/$/, ''),
   pointsRules: (process.env.POINTS_RULES ?? 'frozen,noshots,behind,manual').split(',').map((w) => w.trim().toLowerCase()).filter(Boolean),
   // "behind on ClickUp": at the end of the day, Jibble work time minus ClickUp time is at least this many minutes
   clickupGapMin: num(process.env.CLICKUP_GAP_MINUTES, 60),

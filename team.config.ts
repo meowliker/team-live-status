@@ -42,5 +42,8 @@ export const SETS_TEAM = [
 // Told on Slack when someone's "Needs attention" problem isn't fixed after a reminder (team list names)
 export const SLACK_MANAGERS = ['Apurwa'];
 
+// Get a Slack message every time a point is taken on the Points tab (team list names)
+export const POINTS_NOTIFY = ['Apurwa'];
+
 // Order of department lanes on the board
 export const DEPARTMENTS = ['Creative Strategist', 'Media Buyer', 'Editor', 'Graphic Designer', 'Website Designer', 'Email Marketing', 'Finance', 'HR', 'Other'];
