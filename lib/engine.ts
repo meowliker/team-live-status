@@ -85,14 +85,16 @@ function matchClickup(member: Member, person: JibblePerson, members: ClickupMemb
 
 // ───────────────────────── screenshot analysis ─────────────────────────
 function frozenRuns(list: Shot[], segEnd: string): Overlay[] {
-  const same = (a: Shot, b: Shot) => !a.blank && !b.blank && !!a.sig && !!b.sig && jibble.sigDiff(a.sig, b.sig) < 1.5;
+  const same = (a: Shot, b: Shot) => !a.blank && !b.blank && !!a.sig && !!b.sig && jibble.sameScreen(a.sig, b.sig);
   const runs: Overlay[] = [];
   for (let i = 0; i < list.length - 1; i++) {
     if (!same(list[i], list[i + 1])) continue;
     let j = i + 1;
     while (j + 1 < list.length && same(list[j], list[j + 1])) j++;
     const to = list[j + 1]?.time || segEnd;
-    if (ms(list[i].time, to) >= CONFIG.frozenMin * 60e3) runs.push({ kind: 'frozen', from: list[i].time, to, shots: j - i + 1, ongoing: !list[j + 1] });
+    // Only on evidence: 3+ identical screenshots spanning FROZEN_MINUTES. Waiting for the next screenshot
+    // doesn't count, because Jibble sometimes uploads screenshots late.
+    if (j - i + 1 >= 3 && ms(list[i].time, list[j].time) >= CONFIG.frozenMin * 60e3) runs.push({ kind: 'frozen', from: list[i].time, to, shots: j - i + 1, ongoing: !list[j + 1] });
     i = j;
   }
   return runs;
@@ -152,7 +154,8 @@ class Engine {
     if (!CONFIG.screenshotChecks) return [];
     if (CONFIG.mock) return mock.getNewShots();
     const sot = startOfToday().getTime();
-    const since = this.lastShotFetch && this.lastShotFetch > sot ? new Date(this.lastShotFetch - 20 * 60e3) : new Date(sot);
+    // look back 45 min each time: Jibble can upload a screenshot well after it was taken (already-seen ones are skipped)
+    const since = this.lastShotFetch && this.lastShotFetch > sot ? new Date(this.lastShotFetch - 45 * 60e3) : new Date(sot);
     const fetchedAt = Date.now();
     const list = (await jibble.getScreenshotsSince(since.toISOString())).filter((s) => !this.seenShots.has(s.id) && personIds.has(s.personId));
     const out: Shot[] = [];
@@ -176,7 +179,11 @@ class Engine {
     const list = (this.shots.get(personId) || []).filter((s) => new Date(s.time) >= new Date(workingSince));
     const now = Date.now();
     let awaySince: string | null = null;
-    for (let i = list.length - 1; i >= 0 && list[i].blank; i--) awaySince = list[i].time;
+    let blanks = 0;
+    for (let i = list.length - 1; i >= 0 && list[i].blank; i--) { awaySince = list[i].time; blanks++; }
+    // one blank screenshot isn't enough (a screen locked for a moment): need 2 in a row. If only one arrived and
+    // then nothing, the "no screenshots" rule below still applies.
+    if (blanks < 2) awaySince = null;
     const lastShot = list.at(-1)?.time || null;
     const awayMin = awaySince ? Math.round((now - new Date(awaySince).getTime()) / 60e3) : 0;
     const noShotMin = Math.round((now - new Date(lastShot || workingSince).getTime()) / 60e3);
@@ -212,7 +219,7 @@ class Engine {
           while (j < list.length && list[j].blank) j++;
           const from = list[i].time;
           const to = list[j]?.time || seg.to;
-          if (ms(from, to) >= CONFIG.awayMin * 60e3) overlays.push({ kind: 'away', from, to, shots: j - i });
+          if (j - i >= 2 && ms(from, to) >= CONFIG.awayMin * 60e3) overlays.push({ kind: 'away', from, to, shots: j - i });
           i = j;
         }
         overlays.push(...frozenRuns(list, seg.to));
@@ -413,7 +420,11 @@ class Engine {
       this.prev = next;
 
       // Slack messages for "Needs attention" (only once SLACK_BOT_TOKEN is set)
-      const emails = new Map(matched.map(({ member, person }) => [person.id, member.slack || person.email]));
+      // Every email we know for someone, tried in order until one matches a Slack account:
+      // their `slack` email, their Jibble email, then any email in their aliases (team.config.ts)
+      const isEmail = (x: string | null | undefined): x is string => !!x && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x);
+      const emails = new Map(matched.map(({ member, person }) => [person.id,
+        [...new Set([member.slack, person.email, ...(member.aliases || [])].filter(isEmail).map((x) => x.trim().toLowerCase()))]]));
       try {
         notices.push(...(await this.alerts.run(this.people, emails, (name, text) => this.pushEvent(name, text, 'alert'))));
       } catch (e) {

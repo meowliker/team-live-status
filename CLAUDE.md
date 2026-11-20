@@ -91,6 +91,8 @@ app/
 - **ClickUp time off the clock** (during a logged Jibble break, or after a clock-out until the next clock-in or end of day) is removed from ClickUp hours (live board, Daily, Weekly, CSV) and listed with task, times and reason (`lib/overlap.ts`). Not removed: missed (blank-screen) breaks, and time before the day's first clock-in. A live-feed alert fires when someone goes on break or clocks out with a timer running.
 - **Needs attention** = working and (blank screen ≥ `AWAY_MINUTES` without a break, **or** screen frozen ≥ `FROZEN_MINUTES`, **or** no screenshots ≥ `NO_SCREENSHOT_MINUTES`), **or** a ClickUp timer still running while on break or clocked out, once both the break/clock-out and the timer are older than `ATTENTION_GRACE_SECONDS` (60), so stopping one a few seconds after the other isn't flagged.
 - **Screen checks paused** while a ClickUp timer runs on a task whose name contains one of `QUIET_TASK_WORDS` (default `shoot,meeting,explaining task`, any case): no blank/frozen/no-screenshot alert, no Slack message, and that time isn't counted as a missed break or frozen screen. The card shows "🎬 Screen checks paused" (`PersonRow.quiet`). When the timer stops, watching restarts from that moment, so screenshots taken during the shoot don't trigger an alert on return.
+- **Frozen screen** = 3+ screenshots in a row that show the same screen, spanning `FROZEN_MINUTES` from the first to the last of them (`jibble.sameScreen`). Each screenshot is reduced to a 96×54 greyscale grid; two screenshots are "the same" when 5 or fewer grid cells changed by 3+ grey levels. Typing a line, editing a few words or a moving timeline playhead changes 10+ cells (also on blurred screenshots); a screen where only the taskbar clock moved changes ≤3. Waiting for the next screenshot never counts towards it, because Jibble sometimes uploads screenshots late. (Until Nov 2026 this averaged a 48×27 thumbnail, which called normal work "frozen".)
+- **Blank screen (away)** needs 2+ blank screenshots in a row. A single blank one followed by nothing falls under "no screenshots" instead.
 - **Missed break** = a run of blank screenshots during work time ≥ `AWAY_MINUTES`. This is an estimate, because Jibble takes a screenshot roughly every 10 minutes.
 - **Worked** = Jibble work time minus missed-break time. **Total break** = logged breaks + missed breaks.
 - When someone clocks out, their Free/Busy choice and pool assignment are cleared.
@@ -109,7 +111,7 @@ app/
   - Each point has a stable `key`, so the same problem is never counted twice, even after a restart. Only yesterday is checked, never older days (no back-dated points on first deploy).
   - Every point stores what was seen (`detail`). A manager can add a note, **restore** it (genuine: it stays listed, struck through, worth 0), undo that, or take a point by hand with a reason (`other`). The "I am" name on the board is saved as who did it.
 - Module state that both the API routes and the 7 PM timer use (`sets.json` contents, the week cache) lives on `globalThis`, because Next loads modules separately for `instrumentation.ts` and the routes.
-- People are found in Slack by their Jibble email, or the `slack` email on their `team.config.ts` line. Slack state (open alerts, pool posts) is saved to `alerts.json` so a restart doesn't send duplicates.
+- People are found in Slack by trying, in order, the `slack` email on their `team.config.ts` line, their Jibble email, then every email in their `aliases`. Someone not found is re-checked every 30 minutes, and named in a yellow banner on the board. Slack state (open alerts, pool posts) is saved to `alerts.json` so a restart doesn't send duplicates.
 
 ### Matching people (Jibble ↔ roster ↔ ClickUp)
 
@@ -232,6 +234,7 @@ npx tsc --noEmit             # typecheck (there is no test suite or linter confi
 14. Sets tab (daily sets sheet, ClickUp set counting, Google Sheet import), sets on the Weekly tab and CSV, and the 7 PM missed-target Slack report.
 15. Points tab (KPI): −1 per frozen screen, missing screenshots, being behind on ClickUp, or ClickUp time added by hand; notes and restore. Next.js 16.4.2 → 16.4.6 (security fixes).
 16. Removed Anay, Chirayu, Kazeem, Mahesh, Nischay, Samriddhi, Santushti and Vidit from the team list.
+17. Frozen-screen check rebuilt (finer grid, counts changed areas, needs 3+ identical screenshots) after it flagged people who were working; blank screen needs 2 screenshots; screenshot lookback 45 min; Slack tries every known email for each person.
 
 ## Ideas not built yet
 

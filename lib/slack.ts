@@ -17,13 +17,14 @@ async function api(method: string, params: Record<string, string>) {
   return data;
 }
 
-// email → Slack user id (null = no Slack account with that email); re-checked every 6 hours
+// email → Slack user id (null = no Slack account with that email). Found ones are re-checked every 6 hours,
+// missing ones every 30 minutes so someone who joins Slack (or is fixed) starts getting messages quickly
 const users = new Map<string, { id: string | null; at: number }>();
 
 export async function userByEmail(email: string): Promise<string | null> {
   const key = email.toLowerCase();
   const hit = users.get(key);
-  if (hit && Date.now() - hit.at < 6 * 3600e3) return hit.id;
+  if (hit && Date.now() - hit.at < (hit.id ? 6 * 3600e3 : 30 * 60e3)) return hit.id;
   let id: string | null;
   if (CONFIG.slackDryRun) id = `U_${key}`;
   else {
