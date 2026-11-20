@@ -16,8 +16,6 @@ export const TEAM: Member[] = [
   { name: 'Shivam', department: 'Creative Strategist', aliases: ['shivam@gividreams.com'] },
   { name: 'Aryan Rathore', department: 'Creative Strategist', aliases: ['aryan.r@gividreams.com'] },
 
-  { name: 'Chirayu', department: 'Media Buyer', aliases: ['chirayu@gividreams.com'] },
-  { name: 'Nischay', department: 'Media Buyer', aliases: ['nischay@gividreams.com'] },
   // Jibble only, matched by their Jibble email (plus WorkNexus email)
   { name: 'Ryan Munene', department: 'Media Buyer', clickup: false, aliases: ['ryan@gividreams.com', 'ryanmunene.n@gmail.com'] },
   { name: 'Salman', department: 'Media Buyer', clickup: false, aliases: ['salman@gividreams.com', 'salmanjaved5558@gmail.com'] },
@@ -30,18 +28,9 @@ export const TEAM: Member[] = [
   { name: 'Harish Kumar', department: 'Editor', aliases: ['harish@gividreams.com'] },
   { name: 'Prince Vaishnav', department: 'Editor', aliases: ['prince@gividreams.com'] },
 
-  { name: 'Samriddhi', department: 'Graphic Designer', aliases: ['samriddhi@gividreams.com'] },
   { name: 'Kirti Verma', department: 'Graphic Designer', aliases: ['kirti@gividreams.com'] },
 
-  { name: 'Vidit', department: 'Website Designer', aliases: ['vidit@gividreams.com'] },
-  { name: 'Anay', department: 'Website Designer', aliases: ['anay@gividreams.com'] },
   { name: 'Pragati Shukla', department: 'Website Designer', aliases: ['Pragati', 'pragati@gividreams.com'] },
-
-  { name: 'Kazeem', department: 'Email Marketing', clickup: false, aliases: ['kazeem@gividreams.com'] },
-
-  { name: 'Mahesh', department: 'Finance', clickup: false, aliases: ['mahesh@gividreams.com'] },
-
-  { name: 'Santushti', department: 'HR', clickup: false, aliases: ['santushti@gividreams.com'] },
 ];
 
 // People tracked on the Sets tab (and in the 7 PM missed-target Slack report). Team list names. Empty = everyone.

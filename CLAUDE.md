@@ -231,6 +231,7 @@ npx tsc --noEmit             # typecheck (there is no test suite or linter confi
 13. A ClickUp timer on a shoot / meeting / explaining-task task pauses the screen checks and their Slack messages (`QUIET_TASK_WORDS`).
 14. Sets tab (daily sets sheet, ClickUp set counting, Google Sheet import), sets on the Weekly tab and CSV, and the 7 PM missed-target Slack report.
 15. Points tab (KPI): −1 per frozen screen, missing screenshots, being behind on ClickUp, or ClickUp time added by hand; notes and restore. Next.js 16.4.2 → 16.4.6 (security fixes).
+16. Removed Anay, Chirayu, Kazeem, Mahesh, Nischay, Samriddhi, Santushti and Vidit from the team list.
 
 ## Ideas not built yet
 
