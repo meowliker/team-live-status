@@ -1,5 +1,5 @@
 import { engine } from '@/lib/engine';
-import { edit, summary } from '@/lib/points';
+import { edit, notify, summary } from '@/lib/points';
 import { todayStr } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
@@ -19,5 +19,6 @@ export async function POST(req: Request) {
   const b = await req.json().catch(() => ({}));
   const error = edit(b);
   if (error) return Response.json({ error }, { status: 400 });
+  await notify().catch(() => {}); // a point taken by hand is sent on Slack straight away
   return Response.json({ ok: true });
 }

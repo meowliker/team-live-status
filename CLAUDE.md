@@ -105,10 +105,11 @@ app/
 - **Points (KPI):** everyone starts each month on `POINTS_START` (100) and loses 1 point per problem (`POINTS_RULES`):
   - `frozen`: the same Jibble screenshot for `FROZEN_MINUTES`+ while working (faked or stagnant screen). One point per frozen stretch.
   - `noshots`: no Jibble screenshots for `NO_SCREENSHOT_MINUTES`+ while clocked in (tracker closed). One point per stretch.
-  - `behind`: checked the next morning (after 00:30 team time) for yesterday: Jibble work time minus ClickUp time ≥ `CLICKUP_GAP_MINUTES` (60). One point per day.
+  - `behind`: checked the next morning (after `POINTS_CHECK_TIME`, 09:00 team time) for yesterday: Jibble work time minus ClickUp time ≥ `CLICKUP_GAP_MINUTES` (60). One point per day.
   - `manual`: checked the next morning: a ClickUp entry of `MANUAL_ENTRY_MIN_MINUTES`+ (10) saved `MANUAL_ENTRY_LAG_MINUTES`+ (15) after it ended, i.e. typed in afterwards instead of using the timer. ClickUp's API has no documented timer-vs-manual field, so this uses the entry's `at` (saved) time against its `end`; an entry edited later also counts. One point per entry.
   - Shoot/meeting timers (`QUIET_TASK_WORDS`) pause the screen checks, so they don't cost points. Jibble-only people only get the screen rules.
   - Each point has a stable `key`, so the same problem is never counted twice, even after a restart. Only yesterday is checked, never older days (no back-dated points on first deploy).
+  - **Slack:** every point taken is sent as a DM to the people in `POINTS_NOTIFY` (`team.config.ts`, currently Apurwa), with what was seen, the person's score and a link to the Points tab (`APP_URL`). Points taken together (e.g. the 09:00 ClickUp check) come as one message; a point taken by hand is sent straight away.
   - Every point stores what was seen (`detail`). A manager can add a note, **restore** it (genuine: it stays listed, struck through, worth 0), undo that, or take a point by hand with a reason (`other`). The "I am" name on the board is saved as who did it.
 - Module state that both the API routes and the 7 PM timer use (`sets.json` contents, the week cache) lives on `globalThis`, because Next loads modules separately for `instrumentation.ts` and the routes.
 - People are found in Slack by trying, in order, the `slack` email on their `team.config.ts` line, their Jibble email, then every email in their `aliases`. Someone not found is re-checked every 30 minutes, and named in a yellow banner on the board. Slack state (open alerts, pool posts) is saved to `alerts.json` so a restart doesn't send duplicates.
@@ -170,6 +171,8 @@ See `.env.example`. **Never commit real keys.** `.env` is gitignored, and on Rai
 | `SET_DONE_STATUSES` | Comma-separated status words that count a set as made (default `review,done,complete,closed,approved`) |
 | `POINTS_START` | Points everyone starts each month on (default 100) |
 | `POINTS_RULES` | Which rules take points (default `frozen,noshots,behind,manual`) |
+| `POINTS_CHECK_TIME` | When yesterday's ClickUp rules are checked, team time HH:MM (default `09:00`), so the Slack message arrives in the morning |
+| `APP_URL` | Link used in Slack messages (default the Railway URL) |
 | `CLICKUP_GAP_MINUTES` | "Behind on ClickUp": Jibble time minus ClickUp time for the day (default 60) |
 | `MANUAL_ENTRY_LAG_MINUTES`, `MANUAL_ENTRY_MIN_MINUTES` | "ClickUp time added by hand": saved this long after it ended (15), and at least this long (10) |
 | `SLACK_DRY_RUN` | `on` logs Slack messages instead of sending (always on in demo mode) |
@@ -203,6 +206,7 @@ npx tsc --noEmit             # typecheck (there is no test suite or linter confi
 | Change thresholds or timezone | Environment variables on Railway (no code change) |
 | Change the look | `app/globals.css`: colour tokens at the top (`:root` and the light-mode block) |
 | Change who's on the Sets tab | `SETS_TEAM` in `team.config.ts` (team list names; empty = everyone). Also limits the Weekly sets column and the 7 PM report. |
+| Change who gets the points messages | `POINTS_NOTIFY` in `team.config.ts` (team list names) |
 | Change who's told on Slack | `SLACK_MANAGERS` (escalations) in `team.config.ts`, `SLACK_POOL_MENTION` (pool posts) on Railway; message wording in `lib/alerts.ts` |
 
 ## Decisions and gotchas
@@ -235,6 +239,7 @@ npx tsc --noEmit             # typecheck (there is no test suite or linter confi
 15. Points tab (KPI): −1 per frozen screen, missing screenshots, being behind on ClickUp, or ClickUp time added by hand; notes and restore. Next.js 16.4.2 → 16.4.6 (security fixes).
 16. Removed Anay, Chirayu, Kazeem, Mahesh, Nischay, Samriddhi, Santushti and Vidit from the team list.
 17. Frozen-screen check rebuilt (finer grid, counts changed areas, needs 3+ identical screenshots) after it flagged people who were working; blank screen needs 2 screenshots; screenshot lookback 45 min; Slack tries every known email for each person.
+18. Slack DM to `POINTS_NOTIFY` (Apurwa) for every point taken; ClickUp point checks moved to 09:00.
 
 ## Ideas not built yet
 

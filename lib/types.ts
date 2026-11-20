@@ -234,7 +234,7 @@ export type PointsState = {
   month: string; // YYYY-MM
   start: number;
   rules: string[]; // which automatic rules are on
-  settings: { frozenMin: number; noShotMin: number; clickupGapMin: number; manualLagMin: number };
+  settings: { frozenMin: number; noShotMin: number; clickupGapMin: number; manualLagMin: number; checkTime: string; notify: string[] };
   lastDailyCheck: string | null; // the last day checked for ClickUp problems
   departments: string[];
   people: PointsPerson[];

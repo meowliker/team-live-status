@@ -31,6 +31,12 @@ function minus(from: number, to: number, spans: Span[]): Span[] {
 /** Task names that start with the pool word, any case ("Pool", "POOL", "Pool - waiting"), but not "Swimming pool ad" */
 const poolTaskRe = CONFIG.poolTaskWord ? new RegExp(`^\\W*${CONFIG.poolTaskWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i') : null;
 
+/** Every email we know for someone, in the order to try them on Slack: `slack`, Jibble email, then email aliases */
+export function slackEmails(member: Member, jibbleEmail?: string | null): string[] {
+  const isEmail = (x: string | null | undefined): x is string => !!x && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x);
+  return [...new Set([member.slack, jibbleEmail, ...(member.aliases || [])].filter(isEmail).map((x) => x.trim().toLowerCase()))];
+}
+
 // ───────────────────────── roster matching ─────────────────────────
 /** Tracked from Jibble only: set in team.config.ts, or "Not on ClickUp" on the Settings page */
 const jibbleOnly = (m: Member, mapping: Mapping) => m.clickup === false || mapping[m.name]?.clickup === 'none';
@@ -422,9 +428,7 @@ class Engine {
       // Slack messages for "Needs attention" (only once SLACK_BOT_TOKEN is set)
       // Every email we know for someone, tried in order until one matches a Slack account:
       // their `slack` email, their Jibble email, then any email in their aliases (team.config.ts)
-      const isEmail = (x: string | null | undefined): x is string => !!x && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x);
-      const emails = new Map(matched.map(({ member, person }) => [person.id,
-        [...new Set([member.slack, person.email, ...(member.aliases || [])].filter(isEmail).map((x) => x.trim().toLowerCase()))]]));
+      const emails = new Map(matched.map(({ member, person }) => [person.id, slackEmails(member, person.email)]));
       try {
         notices.push(...(await this.alerts.run(this.people, emails, (name, text) => this.pushEvent(name, text, 'alert'))));
       } catch (e) {

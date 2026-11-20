@@ -4,9 +4,11 @@
 // - behind:  at the end of the day, Jibble time minus ClickUp time ≥ CLICKUP_GAP_MINUTES             (next morning)
 // - manual:  ClickUp time added by hand afterwards instead of with the timer                         (next morning)
 // Every point keeps a note of what was seen. A manager can restore it (genuine) and add their own note.
-import { TEAM } from '../team.config';
+// Each point taken is also sent on Slack to the people in POINTS_NOTIFY (team.config.ts).
+import { POINTS_NOTIFY, TEAM } from '../team.config';
 import { CONFIG } from './config';
-import { engine } from './engine';
+import { engine, slackEmails } from './engine';
+import * as slack from './slack';
 import { readJson, writeJson } from './store';
 import { addDays, todayStr } from './time';
 import { getWeek } from './week';
@@ -14,7 +16,7 @@ import type { Deduction, PointsPerson, PointsRule, PointsState } from './types';
 
 type PointsFile = { deductions: Deduction[]; checked: Record<string, string> };
 // On globalThis: Next loads this module separately for the API routes and the background timer
-const g = globalThis as unknown as { __points?: PointsFile; __pointsTimer?: NodeJS.Timeout };
+const g = globalThis as unknown as { __points?: PointsFile; __pointsTimer?: NodeJS.Timeout; __pointsOutbox?: Deduction[] };
 const load = () => (g.__points ??= { deductions: [], checked: {}, ...readJson<Partial<PointsFile>>('points.json', {}) } as PointsFile);
 const save = () => writeJson('points.json', load());
 
@@ -35,8 +37,10 @@ const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slic
 function take(d: Omit<Deduction, 'id' | 'at'>) {
   const f = load();
   if (f.deductions.some((x) => x.key === d.key)) return false;
-  f.deductions.push({ ...d, id: newId(), at: new Date().toISOString() });
+  const full = { ...d, id: newId(), at: new Date().toISOString() };
+  f.deductions.push(full);
   save();
+  (g.__pointsOutbox ??= []).push(full);
   try { engine().pushEvent(d.name, `−1 point (${RULE_LABELS[d.rule].toLowerCase()}): ${d.detail}`, 'alert'); } catch {}
   return true;
 }
@@ -87,11 +91,12 @@ async function tick() {
   busy = true;
   try {
     checkLive();
-    // Yesterday's ClickUp checks, once, after 00:30 (team time) so late finishers are counted
+    // Yesterday's ClickUp checks, once, after POINTS_CHECK_TIME (09:00 team time), so late finishers are counted
+    // and the Slack message about them arrives in the morning
     const f = load();
     const yesterday = addDays(todayStr(), -1);
     const nowHm = new Date().toLocaleTimeString('en-GB', { timeZone: CONFIG.timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-    if (!f.checked[yesterday] && nowHm >= '00:30' && Date.now() >= retryAt) {
+    if (!f.checked[yesterday] && nowHm >= checkTime() && Date.now() >= retryAt) {
       try {
         await checkDay(yesterday);
         f.checked[yesterday] = new Date().toISOString();
@@ -102,10 +107,46 @@ async function tick() {
         retryAt = Date.now() + 10 * 60e3;
       }
     }
+    await notify();
   } catch (e) {
     console.warn(`points: ${(e as Error).message}`);
   } finally {
     busy = false;
+  }
+}
+
+const checkTime = () => {
+  const [h, m = '0'] = CONFIG.pointsCheckTime.split(':');
+  return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
+};
+
+/** Slack message to POINTS_NOTIFY (team.config.ts) about the points just taken: one message per batch */
+export async function notify() {
+  const batch = g.__pointsOutbox || [];
+  if (!batch.length) return;
+  g.__pointsOutbox = [];
+  if (!slack.slackOn() || !POINTS_NOTIFY.length) return;
+  const month = (d: Deduction) => d.date.slice(0, 7);
+  const scoreOf = (d: Deduction) => CONFIG.pointsStart - load().deductions.filter((x) => x.name === d.name && month(x) === month(d) && !x.restored).length;
+  const dept = (name: string) => TEAM.find((m) => m.name === name)?.department || '';
+  const what = (d: Deduction) => `${RULE_LABELS[d.rule]}: ${d.detail}${d.addedBy ? ` (taken by ${d.addedBy})` : ''}`;
+  const link = CONFIG.appUrl ? `the <${CONFIG.appUrl}|Points tab>` : 'the Points tab';
+  const text = batch.length === 1
+    ? `🔻 *−1 point: ${batch[0].name}* (${dept(batch[0].name)})\n> ${what(batch[0])}\nScore this month: *${scoreOf(batch[0])}/${CONFIG.pointsStart}*. If it was genuine, restore it on ${link}.`
+    : [`🔻 *${batch.length} points taken*`, ...batch.map((d) => `• *${d.name}* (now ${scoreOf(d)}/${CONFIG.pointsStart}): ${what(d)}`), `If any were genuine, restore them on ${link}.`].join('\n');
+  const roster = engine().roster();
+  for (const name of POINTS_NOTIFY) {
+    const r = roster.find((x) => x.member.name === name);
+    if (!r) continue;
+    let user: string | null = null;
+    try {
+      for (const email of slackEmails(r.member, r.person?.email)) if ((user = await slack.userByEmail(email))) break;
+      if (!user) throw new Error(`couldn't find ${name} on Slack by email`);
+      await slack.dm(user, text);
+    } catch (e) {
+      console.warn(`points: Slack message to ${name}: ${(e as Error).message}`);
+      try { engine().pushEvent(name, `couldn't be messaged on Slack about points: ${(e as Error).message}`, 'alert'); } catch {}
+    }
   }
 }
 
@@ -130,7 +171,7 @@ export function summary(month: string): PointsState {
     month,
     start: CONFIG.pointsStart,
     rules: CONFIG.pointsRules,
-    settings: { frozenMin: CONFIG.frozenMin, noShotMin: CONFIG.noShotMin, clickupGapMin: CONFIG.clickupGapMin, manualLagMin: CONFIG.manualEntryLagMin },
+    settings: { frozenMin: CONFIG.frozenMin, noShotMin: CONFIG.noShotMin, clickupGapMin: CONFIG.clickupGapMin, manualLagMin: CONFIG.manualEntryLagMin, checkTime: checkTime(), notify: slack.slackOn() ? POINTS_NOTIFY : [] },
     lastDailyCheck: checked.at(-1) || null,
     departments: e.departments(),
     people,
@@ -146,8 +187,10 @@ export function edit(b: { action: string; id?: string; name?: string; note?: str
     const note = (b.note || '').trim().slice(0, 500);
     if (!note) return 'Add a reason';
     const date = b.date && /^\d{4}-\d{2}-\d{2}$/.test(b.date) ? b.date : todayStr();
-    f.deductions.push({ id: newId(), key: `${b.name}|other|${newId()}`, name: b.name!, date, at: new Date().toISOString(), rule: 'other', detail: note, addedBy: by });
+    const d: Deduction = { id: newId(), key: `${b.name}|other|${newId()}`, name: b.name!, date, at: new Date().toISOString(), rule: 'other', detail: note, addedBy: by };
+    f.deductions.push(d);
     save();
+    (g.__pointsOutbox ??= []).push(d);
     return null;
   }
   const d = f.deductions.find((x) => x.id === b.id);

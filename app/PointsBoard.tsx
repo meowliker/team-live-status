@@ -87,7 +87,7 @@ export default function PointsBoard({ dept, deptColor, timezone, me }: { dept: s
         {data.rules.includes('noshots') && <span><i style={{ background: RULES.noshots.c }} />{RULES.noshots.label}: no Jibble screenshots for {S.noShotMin}+ min while clocked in</span>}
         {data.rules.includes('behind') && <span><i style={{ background: RULES.behind.c }} />{RULES.behind.label}: {S.clickupGapMin}+ min more on Jibble than on ClickUp that day</span>}
         {data.rules.includes('manual') && <span><i style={{ background: RULES.manual.c }} />{RULES.manual.label}: ClickUp time typed in afterwards instead of using the timer</span>}
-        <span className="muted">Shoots and meetings on ClickUp don't count. ClickUp checks run the next morning{data.lastDailyCheck ? ` (last: ${dayLabel(data.lastDailyCheck)})` : ''}.</span>
+        <span className="muted">Shoots and meetings on ClickUp don't count. ClickUp checks run the next morning at {S.checkTime}{data.lastDailyCheck ? ` (last: ${dayLabel(data.lastDailyCheck)})` : ''}.{S.notify.length ? ` Each point is sent on Slack to ${S.notify.join(', ')}.` : ''}</span>
       </div>
 
       <div className="plist">
