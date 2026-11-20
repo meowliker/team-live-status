@@ -63,6 +63,7 @@ export type PersonRow = {
   away: { since: string; minutes: number } | null;
   frozen: { since: string; minutes: number; shots: number } | null;
   noScreenshots: number | null;
+  noShotsSince: string | null; // when the screenshots stopped (last screenshot, or the clock-in)
   blankStreak: number;
   day: DayReport | null;
 };
@@ -116,7 +117,11 @@ export type WeekDay = {
   segments: Segment[];
   activities: { activity: string | null; project: string | null; minutes: number }[];
   tasks: { name: string; url: string | null; minutes: number }[];
+  manual: ManualEntry[]; // ClickUp time added by hand that day
 };
+
+/** A ClickUp time entry that was added by hand (saved well after it ended) rather than recorded with the timer */
+export type ManualEntry = { id: string; task: string; url: string | null; from: string; to: string; minutes: number; addedAt: string };
 
 /** A ClickUp set (task named with a number) in review/done, counted on the last day the person tracked time on it */
 export type SetTask = { name: string; url: string | null; status: string };
@@ -196,4 +201,41 @@ export type WeekReport = {
   errors: string[];
   /** The 7 PM Slack post about missed set targets: when, where, and the dates it was already posted */
   setsReport?: { time: string; channel: string; on: boolean; sent: Record<string, string> };
+};
+
+/** Points: why a point was taken */
+export type PointsRule = 'frozen' | 'noshots' | 'behind' | 'manual' | 'other';
+
+/** One point taken from someone. `restored` = a manager decided it was genuine and gave the point back. */
+export type Deduction = {
+  id: string;
+  key: string; // what it was for, so the same problem is never counted twice (also after a restart)
+  name: string; // team list name
+  date: string; // YYYY-MM-DD (team timezone) the problem happened
+  at: string; // when the point was taken
+  rule: PointsRule;
+  detail: string; // what the app saw, e.g. "Screen didn't change for 32 min (4 identical screenshots) from 14:10"
+  note?: string; // the manager's note
+  addedBy?: string; // for points taken by hand
+  restored?: { by: string; at: string };
+};
+
+export type PointsPerson = {
+  name: string;
+  department: string;
+  score: number; // start − points taken (not counting restored ones)
+  taken: number;
+  restored: number;
+  byRule: Partial<Record<PointsRule, number>>;
+  deductions: Deduction[]; // newest first
+};
+
+export type PointsState = {
+  month: string; // YYYY-MM
+  start: number;
+  rules: string[]; // which automatic rules are on
+  settings: { frozenMin: number; noShotMin: number; clickupGapMin: number; manualLagMin: number };
+  lastDailyCheck: string | null; // the last day checked for ClickUp problems
+  departments: string[];
+  people: PointsPerson[];
 };

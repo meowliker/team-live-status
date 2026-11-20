@@ -82,8 +82,8 @@ a { color: inherit; }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 currentColor; } 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
 .clock { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
 .grow { flex: 1; }
-.tabs { display: flex; background: var(--raised); border: 1px solid var(--line); border-radius: 12px; padding: 3px; }
-.tabs button { border: 0; background: transparent; padding: 6px 13px; border-radius: 9px; font-weight: 700; cursor: pointer; color: var(--muted); transition: color 0.15s; }
+.tabs { display: flex; background: var(--raised); border: 1px solid var(--line); border-radius: 12px; padding: 3px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.tabs button { white-space: nowrap; flex-shrink: 0; border: 0; background: transparent; padding: 6px 13px; border-radius: 9px; font-weight: 700; cursor: pointer; color: var(--muted); transition: color 0.15s; }
 .tabs button:hover { color: var(--text); }
 .tabs button.on { background: var(--accent); color: #fff; box-shadow: 0 4px 14px rgba(124, 92, 255, 0.35); }
 .btn { border: 1px solid var(--line); background: var(--raised); border-radius: 10px; padding: 6px 12px; cursor: pointer; font-weight: 700; font-size: 13px; transition: border-color 0.15s, background 0.15s; }
@@ -367,3 +367,38 @@ select.setin { min-width: 104px; }
 .setprev { border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; margin-bottom: 14px; background: var(--raised); }
 .setprev pre { white-space: pre-wrap; font: inherit; font-size: 13px; margin: 6px 0 0; }
 .dtable .bad, .wtable .bad { color: var(--alert); font-weight: 700; }
+
+/* Points */
+.rules { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+.rules i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 6px; vertical-align: middle; }
+.plist { display: flex; flex-direction: column; gap: 8px; }
+.prow { border: 1px solid var(--line); border-radius: 14px; background: var(--raised); }
+.prow.open { border-color: var(--line-strong); }
+.phead { display: grid; grid-template-columns: minmax(170px, 240px) 1fr auto 14px; align-items: center; gap: 12px; width: 100%; padding: 10px 14px; background: none; border: 0; text-align: left; cursor: pointer; color: inherit; font: inherit; }
+.pchips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.pscore { text-align: right; min-width: 64px; }
+.pscore b { display: block; font-size: 26px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.pscore small { font-size: 11px; color: var(--muted); font-weight: 700; }
+.pscore.good b { color: var(--work); }
+.pscore.mid b { color: var(--break); }
+.pscore.low b { color: var(--alert); }
+.pbody { padding: 4px 14px 14px; display: flex; flex-direction: column; gap: 8px; }
+.ded { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; background: var(--panel); }
+.ded.restored { opacity: 0.6; }
+.ded.restored .ded-t > div { text-decoration: line-through; }
+.ded-main { display: flex; gap: 10px; align-items: flex-start; flex: 1 1 380px; min-width: 0; }
+.ded-main .flag { white-space: nowrap; flex-shrink: 0; }
+.ded-pts { font-weight: 800; color: var(--alert); font-variant-numeric: tabular-nums; min-width: 22px; }
+.ded.restored .ded-pts { color: var(--muted); }
+.ded-t { font-size: 13px; min-width: 0; }
+.ded-t small { display: block; font-size: 11px; margin-top: 2px; }
+.ded-acts { display: flex; gap: 8px; align-items: center; flex: 1 1 340px; justify-content: flex-end; flex-wrap: wrap; }
+.ded-acts .setin.wide { flex: 1; min-width: 200px; }
+.btn.good { color: var(--work); border-color: color-mix(in srgb, var(--work) 35%, transparent); }
+.ptake { display: flex; gap: 8px; align-items: center; }
+.ptake .setin.wide { flex: 1; }
+.ptake .btn, .ded-acts .btn { white-space: nowrap; }
+@media (max-width: 700px) {
+  .phead { grid-template-columns: 1fr auto 14px; }
+  .pchips { grid-column: 1 / -1; grid-row: 2; }
+}

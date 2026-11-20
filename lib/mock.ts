@@ -58,7 +58,12 @@ export async function getNewShots(): Promise<Shot[]> {
   people.forEach((p, i) => {
     const [, since, blanks] = scenario[i];
     const count = Math.floor(since / 10);
-    for (let k = count; k >= 1; k--) out.push({ id: `${p.id}-${k}`, personId: p.id, time: min(k * 10 - 3), blank: k <= blanks });
+    // person 0: the same screenshot for the last 40 min (frozen); person 4: no screenshots for the last 40 min (tracker off)
+    const sig = (k: number) => Buffer.from(Array.from({ length: 16 }, (_, b) => (i === 0 && k <= 4 ? 90 : (k * 31 + b * 17 + i * 7) % 255))).toString('base64');
+    for (let k = count; k >= 1; k--) {
+      if (i === 4 && k <= 4) continue;
+      out.push({ id: `${p.id}-${k}`, personId: p.id, time: min(k * 10 - 3), blank: k <= blanks, sig: sig(k) });
+    }
   });
   return out;
 }
@@ -142,7 +147,9 @@ export async function getClickupEntriesBetween(startMs: number, endMs: number): 
         const isSet = rnd(i, date, `s${k}`) < 0.7;
         const name = isSet ? String(14500 + ((i * 37 + Number(date.slice(8)) * 5 + k) % 300)) : tasks[(i + k + Math.floor(rnd(i, date, 't') * 4)) % tasks.length];
         const status = isSet ? (rnd(i, date, `st${k}`) < 0.75 ? (k ? 'review' : 'done') : 'in progress') : 'in progress';
-        out.push({ id: `${i}-${date}-${k}`, user: { id: 1000 + i }, start: String(a), end: String(b), duration: String(b - a), task: { id: isSet ? `s${name}` : `t${name.length}`, name, status: { status, type: status === 'done' ? 'done' : 'custom' } } });
+        // now and then someone types their afternoon in later instead of running the timer
+        const typedLater = k === 1 && rnd(i, date, 'manual') < 0.15;
+        out.push({ id: `${i}-${date}-${k}`, user: { id: 1000 + i }, start: String(a), end: String(b), duration: String(b - a), at: String(typedLater ? b + 2 * 3600e3 : b), task: { id: isSet ? `s${name}` : `t${name.length}`, name, status: { status, type: status === 'done' ? 'done' : 'custom' } } });
       });
     });
   }

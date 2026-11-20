@@ -7,6 +7,7 @@ import PersonPanel from './PersonPanel';
 import WeekReport from './WeekReport';
 import DailyReport from './DailyReport';
 import SetsSheet from './SetsSheet';
+import PointsBoard from './PointsBoard';
 
 
 type Filter = 'all' | 'working' | 'pool' | 'break' | 'attention' | 'out';
@@ -15,7 +16,7 @@ export default function Board() {
   const [data, setData] = useState<BoardState | null>(null);
   const [failed, setFailed] = useState(false);
   const [, setTick] = useState(0);
-  const [tab, setTab] = useState<'live' | 'day' | 'sets' | 'week'>('live');
+  const [tab, setTab] = useState<'live' | 'day' | 'sets' | 'week' | 'points'>('live');
   const [dept, setDept] = useState('All');
   const [filter, setFilter] = useState<Filter>('all');
   const [me, setMe] = useState('');
@@ -28,7 +29,7 @@ export default function Board() {
     try {
       setMe(localStorage.getItem('me') || '');
       setDept(localStorage.getItem('dept') || 'All');
-      setTab((localStorage.getItem('tab') as 'live' | 'day' | 'sets' | 'week') || 'live');
+      setTab((localStorage.getItem('tab') as 'live' | 'day' | 'sets' | 'week' | 'points') || 'live');
     } catch {}
     setAlerts(typeof Notification === 'undefined' ? 'unsupported' : Notification.permission);
   }, []);
@@ -192,6 +193,7 @@ export default function Board() {
             <button className={tab === 'day' ? 'on' : ''} onClick={() => { setTab('day'); remember('tab', 'day'); }}>Daily</button>
             <button className={tab === 'sets' ? 'on' : ''} onClick={() => { setTab('sets'); remember('tab', 'sets'); }}>Sets</button>
             <button className={tab === 'week' ? 'on' : ''} onClick={() => { setTab('week'); remember('tab', 'week'); }}>Weekly</button>
+            <button className={tab === 'points' ? 'on' : ''} onClick={() => { setTab('points'); remember('tab', 'points'); }}>Points</button>
           </div>
           <div className="grow" />
           <label className="me">I am <input value={me} placeholder="your name" onChange={(e) => { setMe(e.target.value); remember('me', e.target.value.trim()); }} /></label>
@@ -234,6 +236,8 @@ export default function Board() {
           <div>
             {tab === 'week' ? (
               <WeekReport dept={dept} deptColor={deptColor} />
+            ) : tab === 'points' ? (
+              <PointsBoard dept={dept} deptColor={deptColor} timezone={data.timezone} me={me} />
             ) : tab === 'sets' ? (
               <SetsSheet dept={dept} deptColor={deptColor} timezone={data.timezone} />
             ) : tab === 'day' ? (

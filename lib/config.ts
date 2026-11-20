@@ -48,6 +48,14 @@ export const CONFIG = {
   // Evening Slack post listing who missed their set target (team timezone, HH:MM). Empty = off
   setsReportTime: (process.env.SETS_REPORT_TIME ?? '19:00').trim(),
   setsReportChannel: (process.env.SETS_REPORT_CHANNEL ?? process.env.SLACK_POOL_CHANNEL ?? '#creatives').trim(),
+  // Points: everyone starts each month on POINTS_START and loses 1 point per problem (see lib/points.ts)
+  pointsStart: num(process.env.POINTS_START, 100),
+  pointsRules: (process.env.POINTS_RULES ?? 'frozen,noshots,behind,manual').split(',').map((w) => w.trim().toLowerCase()).filter(Boolean),
+  // "behind on ClickUp": at the end of the day, Jibble work time minus ClickUp time is at least this many minutes
+  clickupGapMin: num(process.env.CLICKUP_GAP_MINUTES, 60),
+  // "time added by hand": a ClickUp entry saved at least this long after it ended, and at least this long itself
+  manualEntryLagMin: num(process.env.MANUAL_ENTRY_LAG_MINUTES, 15),
+  manualEntryMinMin: num(process.env.MANUAL_ENTRY_MIN_MINUTES, 10),
   // Log the messages instead of sending them (always on in demo mode)
   slackDryRun: on(process.env.SLACK_DRY_RUN, false) || on(process.env.MOCK, false),
 };
