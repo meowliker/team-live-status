@@ -74,7 +74,7 @@ export async function getScreenshotsSince(sinceIso: string) {
 
 /**
  * blank: the image is almost one flat colour (locked screen, black, sleeping display)
- * sig: tiny greyscale thumbnail used to spot screens that don't change between screenshots
+ * sig: a 96×54 greyscale grid (each cell ≈ 20×20 px of a 1080p screen) used to spot screens that don't change
  */
 export async function analyze(url: string) {
   const sharp = (await import('sharp')).default;
@@ -83,16 +83,23 @@ export async function analyze(url: string) {
   if (!res.ok) throw new Error(`screenshot download ${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());
   const { channels } = await sharp(buf).resize(96, 96, { fit: 'fill' }).greyscale().stats();
-  const sig = await sharp(buf).greyscale().resize(48, 27, { fit: 'fill' }).raw().toBuffer();
+  const sig = await sharp(buf).greyscale().resize(SIG_W, SIG_H, { fit: 'fill', kernel: 'cubic' }).raw().toBuffer();
   return { blank: channels[0].stdev < 4, sig: sig.toString('base64') };
 }
 
-/** Average per-pixel difference between two thumbnails (0 = identical, normal work is 3+) */
-export function sigDiff(a: string, b: string) {
+const SIG_W = 96, SIG_H = 54;
+
+/**
+ * True when two screenshots show the same screen. Counts the grid cells that changed visibly (≥3 grey levels)
+ * instead of averaging over the whole screen, so typing a line, editing a few words or moving a timeline
+ * playhead counts as a change (10+ cells), while a screen where only the taskbar clock moved (≤3 cells) or a
+ * re-saved JPEG (0) counts as the same. Tested on mock screenshots, normal and blurred.
+ */
+export function sameScreen(a: string, b: string) {
   const x = Buffer.from(a, 'base64');
   const y = Buffer.from(b, 'base64');
-  if (x.length !== y.length) return 255;
-  let d = 0;
-  for (let i = 0; i < x.length; i++) d += Math.abs(x[i] - y[i]);
-  return d / x.length;
+  if (x.length !== y.length) return false; // older signatures: can't compare, so never call them frozen
+  let changed = 0;
+  for (let i = 0; i < x.length; i++) if (Math.abs(x[i] - y[i]) >= 3 && ++changed > 5) return false;
+  return true;
 }

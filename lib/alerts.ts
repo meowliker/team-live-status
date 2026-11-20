@@ -50,10 +50,10 @@ export class SlackAlerts {
   }
 
   /**
-   * Called after every poll. `people` are the board rows; `emails` maps a person id to the email used to
+   * Called after every poll. `people` are the board rows; `emails` maps a person id to the emails tried, in order, to
    * find them in Slack. Returns notices for the board (e.g. someone who couldn't be found in Slack).
    */
-  async run(people: PersonRow[], emails: Map<string, string | null>, event: (name: string, text: string) => void) {
+  async run(people: PersonRow[], emails: Map<string, string[]>, event: (name: string, text: string) => void) {
     if (!slack.slackOn()) return [];
     const now = Date.now();
     const notices: string[] = [];
@@ -61,8 +61,8 @@ export class SlackAlerts {
     const s = this.state;
     let changed = false;
     const userOf = async (p: { id: string; name: string }) => {
-      const email = emails.get(p.id);
-      const id = email ? await slack.userByEmail(email) : null;
+      let id: string | null = null;
+      for (const email of emails.get(p.id) || []) if ((id = await slack.userByEmail(email))) break;
       if (!id) this.missing.add(p.name);
       return id;
     };
@@ -84,7 +84,7 @@ export class SlackAlerts {
     for (const id of Object.keys(s.pool)) if (!people.some((p) => p.id === id)) { delete s.pool[id]; changed = true; }
     for (const [key, until] of Object.entries(s.quietUntil)) if (until < now) { delete s.quietUntil[key]; changed = true; }
     if (changed) this.save(s);
-    if (this.missing.size) notices.push(`Slack: couldn't find ${[...this.missing].join(', ')} by email, so they weren't messaged. Use the same email in Slack and Jibble, or add their Slack email as \`slack\` in team.config.ts.`);
+    if (this.missing.size) notices.push(`Slack: couldn't find ${[...this.missing].join(', ')} by email, so they weren't messaged. Tried their Jibble email and the emails in team.config.ts; add their Slack email as \`slack\` on their line there.`);
     return notices;
   }
 
