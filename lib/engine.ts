@@ -186,6 +186,7 @@ class Engine {
       away: awaySince && awayMin >= CONFIG.awayMin ? { since: awaySince, minutes: awayMin } : null,
       blankStreak: awaySince ? list.filter((s) => new Date(s.time) >= new Date(awaySince!)).length : 0,
       noScreenshots: !awaySince && noShotMin >= CONFIG.noShotMin ? noShotMin : null,
+      noShotsSince: !awaySince && noShotMin >= CONFIG.noShotMin ? lastShot || workingSince : null,
     };
   }
 
@@ -359,7 +360,7 @@ class Engine {
         // A ClickUp timer on a shoot / meeting / explaining-task task pauses the screen checks while it runs
         const quiet = timer && isQuietTask(timer.task) ? timer.task : null;
         const quietSpans = (t?.entries || []).filter((x) => isQuietTask(x.task)).map((x) => ({ from: x.from, to: x.to }));
-        const noAway = { away: null, frozen: null, noScreenshots: null, blankStreak: 0 };
+        const noAway = { away: null, frozen: null, noScreenshots: null, noShotsSince: null, blankStreak: 0 };
         const away = state === 'working' && CONFIG.screenshotChecks && !quiet ? this.awayInfo(p.id, since!, quietSpans) : noAway;
         const day = todays.has(p.id) ? this.dayReport(todays.get(p.id)!, this.shots.get(p.id) || [], nowIso, quietSpans) : null;
         // ClickUp time that ran during a Jibble break is taken off their ClickUp hours

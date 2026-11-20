@@ -4,7 +4,7 @@ import * as jibble from './jibble';
 import * as clickup from './clickup';
 import * as mock from './mock';
 import { addDays, mondayOf, startOfDay, todayStr } from './time';
-import type { ClickupSpan, JibbleEntry, PersonWeek, Segment, SetTask, WeekDay, WeekReport } from './types';
+import type { ClickupSpan, JibbleEntry, ManualEntry, PersonWeek, Segment, SetTask, WeekDay, WeekReport } from './types';
 import { offClockSpans, removeOffClockTime } from './overlap';
 
 // Past weeks don't change, so keep them for an hour; the current week for 5 minutes
@@ -58,6 +58,7 @@ async function buildWeek(weekStart: string): Promise<WeekReport> {
 
   // ClickUp timer stretches per user per day (by the day the timer started)
   const cuSpans = new Map<string, ClickupSpan[]>(); // `${uid}|${date}`
+  const manual = new Map<string, ManualEntry[]>(); // `${uid}|${date}`
   for (const x of cuEntries || []) {
     const uid = Number(x.user?.id);
     const start = Number(x.start);
@@ -69,6 +70,12 @@ async function buildWeek(weekStart: string): Promise<WeekReport> {
     if (!cuSpans.has(key)) cuSpans.set(key, []);
     const t = clickup.entryTask(x);
     cuSpans.get(key)!.push({ from: start, to: end, task: t.name, url: t.url });
+    // Added by hand: saved well after it ended (a timer is saved the moment it stops)
+    const at = Number(x.at);
+    if (dur >= 0 && at && at - end >= CONFIG.manualEntryLagMin * 60e3 && end - start >= CONFIG.manualEntryMinMin * 60e3) {
+      if (!manual.has(key)) manual.set(key, []);
+      manual.get(key)!.push({ id: String(x.id), task: t.name, url: t.url, from: new Date(start).toISOString(), to: new Date(end).toISOString(), minutes: Math.round((end - start) / 60e3), addedAt: new Date(at).toISOString() });
+    }
   }
 
   // Sets: tasks named with a number, in review/done, counted on the last day each person tracked time on them
@@ -138,6 +145,7 @@ async function buildWeek(weekStart: string): Promise<WeekReport> {
         segments,
         activities: [...acts.values()].map((a) => ({ ...a, minutes: Math.round(a.minutes) })).filter((a) => a.minutes > 0).sort((a, b) => b.minutes - a.minutes),
         tasks: cuDay ? cuDay.tasks.map(({ name, url, minutes }) => ({ name, url, minutes })) : [],
+        manual: useCu ? manual.get(`${cu!.id}|${date}`) || [] : [],
       };
     });
 

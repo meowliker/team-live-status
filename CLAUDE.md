@@ -20,6 +20,7 @@ A single web page that shows a team **live**: who is working, on break, free to 
 | **Daily** tab | Any date (Today / Yesterday / ‹ › / date picker). Today is the live report: clock-in/out, worked vs target, ClickUp tracked, breaks vs allowance, missed-break and frozen-screen flags, colour timeline. Past days are rebuilt from Jibble + ClickUp history (no screenshot flags) and each row expands to that day's Jibble activities and ClickUp tasks. **Download CSV** per day. |
 | **Sets** tab | The daily sets sheet (replaces the Google Sheet) for the people in `SETS_TEAM` (`team.config.ts`): per person Task assigned, No. of sets, Middle OTD, Carry forward, Video (Ai / Non Ai / 50-50), Status, Target hit (auto, with Yes/No override) and Reason. Everyone can edit; saved per cell. Empty "No. of sets" = ClickUp count. Tiles, Slack-message preview, **Import sheet** (CSV), **CSV** per day. Full width (no live feed). |
 | **Weekly** tab | Pick a week (This week / Last week / ‹ ›). Team averages, then per person: days in, avg clock-in/out, avg worked per day and days on target, avg break and days over allowance, ClickUp per day and coverage, and a bar per day. Click a row for day-by-day numbers, Jibble activities and top ClickUp tasks. **Download CSV** and **Print**. |
+| **Points** tab | KPI points per month for everyone: start on `POINTS_START` (100), −1 per problem (frozen screen, no screenshots, behind on ClickUp, ClickUp time added by hand). Each point keeps a note of what was seen; managers add a note, **restore** it when genuine, or take a point by hand with a reason. Worst score first. |
 | **Person panel** | Click any name or avatar: their day, timeline, time per Jibble activity + project, and time per ClickUp task. |
 | **Slack** (optional) | DMs for *Needs attention* (reminder + managers after `SLACK_REMIND_MINUTES`, "✅ Sorted" when fixed) and pool posts in `SLACK_POOL_CHANNEL` with @here, with "✅ Assigned by …" in the thread. |
 | **Slack 7 PM report** | At `SETS_REPORT_TIME` (19:00) one post in `SETS_REPORT_CHANNEL` (#creatives) listing who missed their set target and why; nothing when everyone hit it. |
@@ -46,6 +47,7 @@ lib/
   clickup.ts            ← ClickUp API client: members, today's timers (+ running timer per person), ranges
   week.ts               ← Week/day history builder (a week of Jibble + ClickUp history) + weekly and daily CSV
   overlap.ts            ← Removes ClickUp time that ran off the clock (Jibble breaks, after clock-out)
+  points.ts             ← Points (KPI): rules that take a point, points.json storage, monthly scores, restore/notes
   sets.ts               ← Sets sheet: sets.json storage, target maths, weekly totals, CSV import/export, 7 PM Slack report
   store.ts              ← readJson / writeJson for the small JSON files in DATA_DIR
   alerts.ts             ← Slack rules: Needs-attention DMs, reminders, manager messages, pool channel posts
@@ -58,6 +60,7 @@ app/
   PersonPanel.tsx       ← Side panel opened by clicking a name
   WeekReport.tsx        ← Weekly tab UI
   DailyReport.tsx       ← Daily tab: date navigation; today = live report, past days from /api/week
+  PointsBoard.tsx       ← Points tab: score per person, points taken with notes, restore / take by hand
   SetsSheet.tsx         ← Sets tab: the editable daily sheet (reads /api/week, saves to /api/sets)
   format.ts             ← Display helpers (durations, times, initials, avatar gradients)
   settings/             ← Settings page (Jibble/ClickUp linking)
@@ -67,6 +70,7 @@ app/
   api/week              ← GET ?start=YYYY-MM-DD [&format=csv [&day=YYYY-MM-DD]] [&fresh=1]: weekly report, or one day's CSV (sets sheet attached per person)
   api/sets              ← POST {date,name,field,value}: save one cell · GET ?date=&format=csv: day sheet CSV · GET ?date=&preview=1: Slack text
   api/sets/import       ← POST CSV text: import the old Google Sheet
+  api/points            ← GET ?month=YYYY-MM: scores and points taken · POST {action: restore|unrestore|note|take|delete, id?, name?, note?, by?}
 ```
 
 ## How it works
@@ -96,6 +100,14 @@ app/
 - **Sets:** a ClickUp task whose name starts with a number (`SET_TASK_PATTERN`, e.g. "14588", "14589/14410/1") is one set. It counts once its status contains one of `SET_DONE_STATUSES` (review, done, complete, closed, approved), on the **last day the person tracked time on it** (ClickUp is read up to a week past the report week, so a set finished next week isn't counted twice). The status is the task's current status. A typed "No. of sets" always wins over the ClickUp count.
 - **Sets targets:** cells are free text like the old sheet; the number is the sum of the numbers outside brackets ("5 + shoot" = 5, "1 + 1 ai automation" = 2, "reworks + 1 (4 sets in 1)" = 1, "pool" = none). **Target = Task assigned + Middle OTD.** Target hit = sets made ≥ target, or No when Status is "Not done"; the Target hit dropdown overrides it. Carry forward is typed (the placeholder suggests target − made); the next day shows "+N carried from last day".
 - **Slack, sets report:** once a day after `SETS_REPORT_TIME` (team timezone) a single post in `SETS_REPORT_CHANNEL` lists each person whose target hit is No: "completed X of Y sets; N carried forward", and the typed Reason, or one worked out from Jibble/ClickUp (mid-day sets, shoot/meeting time, pool time, research, short hours, long breaks). Nothing is posted if everyone hit it. The day is marked in `sets.json` (`reported`) so it's never posted twice, even after a restart; edits after the post don't re-post.
+- **Points (KPI):** everyone starts each month on `POINTS_START` (100) and loses 1 point per problem (`POINTS_RULES`):
+  - `frozen`: the same Jibble screenshot for `FROZEN_MINUTES`+ while working (faked or stagnant screen). One point per frozen stretch.
+  - `noshots`: no Jibble screenshots for `NO_SCREENSHOT_MINUTES`+ while clocked in (tracker closed). One point per stretch.
+  - `behind`: checked the next morning (after 00:30 team time) for yesterday: Jibble work time minus ClickUp time ≥ `CLICKUP_GAP_MINUTES` (60). One point per day.
+  - `manual`: checked the next morning: a ClickUp entry of `MANUAL_ENTRY_MIN_MINUTES`+ (10) saved `MANUAL_ENTRY_LAG_MINUTES`+ (15) after it ended, i.e. typed in afterwards instead of using the timer. ClickUp's API has no documented timer-vs-manual field, so this uses the entry's `at` (saved) time against its `end`; an entry edited later also counts. One point per entry.
+  - Shoot/meeting timers (`QUIET_TASK_WORDS`) pause the screen checks, so they don't cost points. Jibble-only people only get the screen rules.
+  - Each point has a stable `key`, so the same problem is never counted twice, even after a restart. Only yesterday is checked, never older days (no back-dated points on first deploy).
+  - Every point stores what was seen (`detail`). A manager can add a note, **restore** it (genuine: it stays listed, struck through, worth 0), undo that, or take a point by hand with a reason (`other`). The "I am" name on the board is saved as who did it.
 - Module state that both the API routes and the 7 PM timer use (`sets.json` contents, the week cache) lives on `globalThis`, because Next loads modules separately for `instrumentation.ts` and the routes.
 - People are found in Slack by their Jibble email, or the `slack` email on their `team.config.ts` line. Slack state (open alerts, pool posts) is saved to `alerts.json` so a restart doesn't send duplicates.
 
@@ -118,6 +130,7 @@ There is **no database**. Everything comes live from Jibble and ClickUp and is h
 | `alerts.json` | Open Slack alerts and pool posts (so a restart doesn't re-send) |
 | `pool.json` | Free/Busy modes and who assigned whom from the pool |
 | `shots.json` | Today's analysed screenshots, so a restart doesn't re-download them |
+| `points.json` | Every point taken (with what was seen, notes, restores) and the days already checked for ClickUp problems |
 | `sets.json` | The sets sheet (per date, per roster name) and the dates the 7 PM Slack report was posted |
 
 - `DATA_DIR` defaults to the Railway volume (`RAILWAY_VOLUME_MOUNT_PATH`) when one is attached, otherwise `.data/`.
@@ -153,6 +166,10 @@ See `.env.example`. **Never commit real keys.** `.env` is gitignored, and on Rai
 | `SETS_REPORT_CHANNEL` | Where it goes (default `SLACK_POOL_CHANNEL`, i.e. `#creatives`) |
 | `SET_TASK_PATTERN` | Regex for ClickUp task names that are sets (default `^\s*\d`: starts with a number) |
 | `SET_DONE_STATUSES` | Comma-separated status words that count a set as made (default `review,done,complete,closed,approved`) |
+| `POINTS_START` | Points everyone starts each month on (default 100) |
+| `POINTS_RULES` | Which rules take points (default `frozen,noshots,behind,manual`) |
+| `CLICKUP_GAP_MINUTES` | "Behind on ClickUp": Jibble time minus ClickUp time for the day (default 60) |
+| `MANUAL_ENTRY_LAG_MINUTES`, `MANUAL_ENTRY_MIN_MINUTES` | "ClickUp time added by hand": saved this long after it ended (15), and at least this long (10) |
 | `SLACK_DRY_RUN` | `on` logs Slack messages instead of sending (always on in demo mode) |
 | `MOCK=1` | Demo mode with fake data, no keys needed |
 
@@ -213,6 +230,7 @@ npx tsc --noEmit             # typecheck (there is no test suite or linter confi
 12. Pool posts use @here instead of tagging people one by one.
 13. A ClickUp timer on a shoot / meeting / explaining-task task pauses the screen checks and their Slack messages (`QUIET_TASK_WORDS`).
 14. Sets tab (daily sets sheet, ClickUp set counting, Google Sheet import), sets on the Weekly tab and CSV, and the 7 PM missed-target Slack report.
+15. Points tab (KPI): −1 per frozen screen, missing screenshots, being behind on ClickUp, or ClickUp time added by hand; notes and restore. Next.js 16.4.2 → 16.4.6 (security fixes).
 
 ## Ideas not built yet
 

@@ -15,6 +15,7 @@ One link that shows your team live:
 - **Click anyone's name** to see their day: clock-in, worked time, breaks, a timeline, time per Jibble activity/project (the activity picked at clock-in) and time per ClickUp task.
 - **Sets**: the daily sets sheet for the people listed in `SETS_TEAM` (`team.config.ts`), like the Google Sheet: Task assigned (from the morning meeting), No. of sets, Middle OTD, Carry forward, Video, Status, Target hit and Reason. Anyone can edit; it saves as you type. If "No. of sets" is left empty it's counted from ClickUp: tasks named with a number (e.g. "14588") that are in review or done. **⬆ Import sheet** brings in the old Google Sheet (File → Download → CSV). The Weekly tab and CSV show total sets, average per day and days the target was hit.
 - **7 PM target report**: at 7 PM (team time) one Slack post in #creatives lists who missed their set target, with the reason typed on the Sets tab (or one worked out from the day's data). Nothing is posted when everyone hit it. Change the time with `SETS_REPORT_TIME`.
+- **Points**: a KPI score per person for the month. Everyone starts on 100 and loses 1 point each time the app sees a frozen Jibble screen, no Jibble screenshots while clocked in, a day with an hour or more of Jibble time not tracked on ClickUp, or ClickUp time typed in afterwards instead of using the timer. Each point says exactly what was seen; click **✓ Genuine, restore point** (and add a note) when there was a good reason. You can also take a point by hand with a reason.
 - **Weekly**: pick any week (this week, last week, or step back) to see each person's days in, average clock-in and clock-out, average worked time and days on target, average breaks and days over the allowance, ClickUp time per day and coverage, a bar per day, and their Jibble activities and top ClickUp tasks. **Download CSV** for a spreadsheet, or **Print**. Built from Jibble and ClickUp history, so past weeks work too.
 - **Slack** (optional): when someone lands in *Needs attention* they get a Slack DM saying what's wrong and how to fix it; if it isn't fixed after 10 minutes they get a reminder and the managers in `team.config.ts` (`SLACK_MANAGERS`) are told; when it clears, "✅ Sorted" is posted in the same threads. When someone joins the pool, it's posted in `#creatives` with **@here** (set `SLACK_POOL_MENTION=channel` for @channel); if they're still free after 15 minutes, a reminder follows in the thread, then "✅ Assigned by …". Set it up: see *Slack setup* below.
 - Live feed, browser alerts, department filters, light and dark mode. Works on phones.
@@ -37,6 +38,7 @@ A few small files are saved in the data folder (`DATA_DIR`, default `.data/`):
 - `mapping.json`: links set on the Settings page
 - `pool.json`: Free/Busy choices and who assigned whom from the pool
 - `shots.json`: today's screenshot checks, so a restart doesn't re-download them
+- `points.json`: points taken, with notes and restores
 - `sets.json`: the Sets sheet (typed numbers, reasons) and which days the 7 PM report was posted
 
 The live feed is kept in memory only and starts empty after a restart.

@@ -6,5 +6,7 @@ export async function register() {
     engine();
     const { startSetsReport } = await import('./lib/sets');
     startSetsReport();
+    const { startPoints } = await import('./lib/points');
+    startPoints();
   }
 }
