@@ -203,6 +203,39 @@ export type WeekReport = {
   setsReport?: { time: string; channel: string; on: boolean; sent: Record<string, string> };
 };
 
+/** One week's slice of a month (only the days inside that month) */
+export type MonthWeek = {
+  from: string;
+  to: string;
+  daysPresent: number;
+  totalWorked: number;
+  avgWorked: number;
+  avgBreak: number;
+  totalClickup: number | null;
+  sets: number | null; // sets made (null = not on the sets sheet, or nothing recorded)
+  targetDays: number;
+  hitDays: number;
+};
+
+export type PersonMonth = Omit<PersonWeek, 'cuSets' | 'sets'> & {
+  weeks: MonthWeek[];
+  points: PointsPerson | null;
+};
+
+export type MonthReport = {
+  month: string; // YYYY-MM
+  dates: string[]; // every date of the month up to today
+  generatedAt: string;
+  timezone: string;
+  clickup: boolean;
+  settings: { workTargetMin: number; breakAllowanceMin: number };
+  departments: string[];
+  pointsStart: number;
+  people: PersonMonth[];
+  notFound: string[];
+  errors: string[];
+};
+
 /** Points: why a point was taken */
 export type PointsRule = 'frozen' | 'noshots' | 'behind' | 'manual' | 'other';
 

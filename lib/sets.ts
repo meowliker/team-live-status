@@ -63,7 +63,7 @@ export function dayOf(date: string, name: string, clickup: SetTask[] | null): Se
   return { ...row, date, clickup, madeNum, target, carryNum: num(row.carry), autoHit, isHit, carriedIn };
 }
 
-function summary(days: SetDay[], upTo: string): SetsSummary {
+export function summary(days: SetDay[], upTo: string): SetsSummary {
   const done = days.filter((d) => d.date <= upTo && d.madeNum !== null && (d.madeNum > 0 || d.target !== null || num(d.made) !== null));
   const total = done.reduce((t, d) => t + d.madeNum!, 0);
   const video: Record<string, number> = {};

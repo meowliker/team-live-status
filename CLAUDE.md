@@ -20,6 +20,7 @@ A single web page that shows a team **live**: who is working, on break, free to 
 | **Daily** tab | Any date (Today / Yesterday / ‹ › / date picker). Today is the live report: clock-in/out, worked vs target, ClickUp tracked, breaks vs allowance, missed-break and frozen-screen flags, colour timeline. Past days are rebuilt from Jibble + ClickUp history (no screenshot flags) and each row expands to that day's Jibble activities and ClickUp tasks. **Download CSV** per day. |
 | **Sets** tab | The daily sets sheet (replaces the Google Sheet) for the people in `SETS_TEAM` (`team.config.ts`): per person Task assigned, No. of sets, Middle OTD, Carry forward, Video (Ai / Non Ai / 50-50), Status, Target hit (auto, with Yes/No override) and Reason. Everyone can edit; saved per cell. Empty "No. of sets" = ClickUp count. Tiles, Slack-message preview, **Import sheet** (CSV), **CSV** per day. Full width (no live feed). |
 | **Weekly** tab | Pick a week (This week / Last week / ‹ ›). Team averages, then per person: days in, avg clock-in/out, avg worked per day and days on target, avg break and days over allowance, ClickUp per day and coverage, and a bar per day. Click a row for day-by-day numbers, Jibble activities and top ClickUp tasks. **Download CSV** and **Print**. |
+| **Monthly** tab | Pick a month (This month / Last month / ‹ ›), up to today. Team tiles (avg worked, clock-in, break, ClickUp coverage, sets and targets hit, points lost), highlights (most sets, most hours, below the hours target, most points lost), then per person: days, avg in/out, avg and total worked, break, ClickUp, sets, points score and a bar per day. Click a row for week-by-week numbers, points taken, Jibble activities and top ClickUp tasks. **Download CSV** and **Print**. Full width (no live feed). |
 | **Points** tab | KPI points per month for everyone: start on `POINTS_START` (100), −1 per problem (frozen screen, no screenshots, behind on ClickUp, ClickUp time added by hand). Each point keeps a note of what was seen; managers add a note, **restore** it when genuine, or take a point by hand with a reason. Worst score first. |
 | **Person panel** | Click any name or avatar: their day, timeline, time per Jibble activity + project, and time per ClickUp task. |
 | **Slack** (optional) | DMs for *Needs attention* (reminder + managers after `SLACK_REMIND_MINUTES`, "✅ Sorted" when fixed) and pool posts in `SLACK_POOL_CHANNEL` with @here, with "✅ Assigned by …" in the thread. |
@@ -46,6 +47,7 @@ lib/
   jibble.ts             ← Jibble API client (OAuth client-credentials), entries, screenshots, image analysis
   clickup.ts            ← ClickUp API client: members, today's timers (+ running timer per person), ranges
   week.ts               ← Week/day history builder (a week of Jibble + ClickUp history) + weekly and daily CSV
+  month.ts              ← Monthly report: the weeks touching the month cut to its days, plus sets and points; monthly CSV
   overlap.ts            ← Removes ClickUp time that ran off the clock (Jibble breaks, after clock-out)
   points.ts             ← Points (KPI): rules that take a point, points.json storage, monthly scores, restore/notes
   sets.ts               ← Sets sheet: sets.json storage, target maths, weekly totals, CSV import/export, 7 PM Slack report
@@ -60,6 +62,7 @@ app/
   PersonPanel.tsx       ← Side panel opened by clicking a name
   WeekReport.tsx        ← Weekly tab UI
   DailyReport.tsx       ← Daily tab: date navigation; today = live report, past days from /api/week
+  MonthReport.tsx       ← Monthly tab UI (reads /api/month)
   PointsBoard.tsx       ← Points tab: score per person, points taken with notes, restore / take by hand
   SetsSheet.tsx         ← Sets tab: the editable daily sheet (reads /api/week, saves to /api/sets)
   format.ts             ← Display helpers (durations, times, initials, avatar gradients)
@@ -68,6 +71,7 @@ app/
   api/action            ← POST: refresh | pick | release | mode (free/busy/auto)
   api/settings          ← GET/POST: manual Jibble/ClickUp links
   api/week              ← GET ?start=YYYY-MM-DD [&format=csv [&day=YYYY-MM-DD]] [&fresh=1]: weekly report, or one day's CSV (sets sheet attached per person)
+  api/month             ← GET ?month=YYYY-MM [&format=csv] [&fresh=1]: monthly report or its CSV
   api/sets              ← POST {date,name,field,value}: save one cell · GET ?date=&format=csv: day sheet CSV · GET ?date=&preview=1: Slack text
   api/sets/import       ← POST CSV text: import the old Google Sheet
   api/points            ← GET ?month=YYYY-MM: scores and points taken · POST {action: restore|unrestore|note|take|delete, id?, name?, note?, by?}
@@ -111,6 +115,7 @@ app/
   - Each point has a stable `key`, so the same problem is never counted twice, even after a restart. Only yesterday is checked, never older days (no back-dated points on first deploy).
   - **Slack:** every point taken is sent as a DM to the people in `POINTS_NOTIFY` (`team.config.ts`, currently Apurwa), with what was seen, the person's score and a link to the Points tab (`APP_URL`). Points taken together (e.g. the 09:00 ClickUp check) come as one message; a point taken by hand is sent straight away.
   - Every point stores what was seen (`detail`). A manager can add a note, **restore** it (genuine: it stays listed, struck through, worth 0), undo that, or take a point by hand with a reason (`other`). The "I am" name on the board is saved as who did it.
+- **Monthly report:** not stored. Built from the same weekly data (one week at a time, using the week cache), keeping only dates inside the month, so month and week numbers agree. Averages are per day clocked in. The first load of a month reads 5–6 weeks of history, so it is slower. Points come from `points.json` (nothing before the Points tab existed).
 - Module state that both the API routes and the 7 PM timer use (`sets.json` contents, the week cache) lives on `globalThis`, because Next loads modules separately for `instrumentation.ts` and the routes.
 - People are found in Slack by trying, in order, the `slack` email on their `team.config.ts` line, their Jibble email, then every email in their `aliases`. Someone not found is re-checked every 30 minutes, and named in a yellow banner on the board. Slack state (open alerts, pool posts) is saved to `alerts.json` so a restart doesn't send duplicates.
 
@@ -240,6 +245,7 @@ npx tsc --noEmit             # typecheck (there is no test suite or linter confi
 16. Removed Anay, Chirayu, Kazeem, Mahesh, Nischay, Samriddhi, Santushti and Vidit from the team list.
 17. Frozen-screen check rebuilt (finer grid, counts changed areas, needs 3+ identical screenshots) after it flagged people who were working; blank screen needs 2 screenshots; screenshot lookback 45 min; Slack tries every known email for each person.
 18. Slack DM to `POINTS_NOTIFY` (Apurwa) for every point taken; ClickUp point checks moved to 09:00.
+19. Monthly tab: monthly report per person (hours, breaks, ClickUp, sets, points, week-by-week), highlights, CSV and print.
 
 ## Ideas not built yet
 
