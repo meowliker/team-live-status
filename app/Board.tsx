@@ -5,6 +5,7 @@ import type { BoardEvent, BoardState, PersonRow } from '@/lib/types';
 import { DEPT_COLORS, ago, dur, fm, hm, initials, mins, offLabel, reasonText } from './format';
 import PersonPanel from './PersonPanel';
 import WeekReport from './WeekReport';
+import MonthReport from './MonthReport';
 import DailyReport from './DailyReport';
 import SetsSheet from './SetsSheet';
 import PointsBoard from './PointsBoard';
@@ -16,7 +17,7 @@ export default function Board() {
   const [data, setData] = useState<BoardState | null>(null);
   const [failed, setFailed] = useState(false);
   const [, setTick] = useState(0);
-  const [tab, setTab] = useState<'live' | 'day' | 'sets' | 'week' | 'points'>('live');
+  const [tab, setTab] = useState<'live' | 'day' | 'sets' | 'week' | 'month' | 'points'>('live');
   const [dept, setDept] = useState('All');
   const [filter, setFilter] = useState<Filter>('all');
   const [me, setMe] = useState('');
@@ -29,7 +30,7 @@ export default function Board() {
     try {
       setMe(localStorage.getItem('me') || '');
       setDept(localStorage.getItem('dept') || 'All');
-      setTab((localStorage.getItem('tab') as 'live' | 'day' | 'sets' | 'week' | 'points') || 'live');
+      setTab((localStorage.getItem('tab') as 'live' | 'day' | 'sets' | 'week' | 'month' | 'points') || 'live');
     } catch {}
     setAlerts(typeof Notification === 'undefined' ? 'unsupported' : Notification.permission);
   }, []);
@@ -193,6 +194,7 @@ export default function Board() {
             <button className={tab === 'day' ? 'on' : ''} onClick={() => { setTab('day'); remember('tab', 'day'); }}>Daily</button>
             <button className={tab === 'sets' ? 'on' : ''} onClick={() => { setTab('sets'); remember('tab', 'sets'); }}>Sets</button>
             <button className={tab === 'week' ? 'on' : ''} onClick={() => { setTab('week'); remember('tab', 'week'); }}>Weekly</button>
+            <button className={tab === 'month' ? 'on' : ''} onClick={() => { setTab('month'); remember('tab', 'month'); }}>Monthly</button>
             <button className={tab === 'points' ? 'on' : ''} onClick={() => { setTab('points'); remember('tab', 'points'); }}>Points</button>
           </div>
           <div className="grow" />
@@ -232,10 +234,12 @@ export default function Board() {
           })}
         </div>
 
-        <div className={`layout ${tab === 'sets' ? 'full' : ''}`}>
+        <div className={`layout ${tab === 'sets' || tab === 'month' ? 'full' : ''}`}>
           <div>
             {tab === 'week' ? (
               <WeekReport dept={dept} deptColor={deptColor} />
+            ) : tab === 'month' ? (
+              <MonthReport dept={dept} deptColor={deptColor} />
             ) : tab === 'points' ? (
               <PointsBoard dept={dept} deptColor={deptColor} timezone={data.timezone} me={me} />
             ) : tab === 'sets' ? (
@@ -333,7 +337,7 @@ export default function Board() {
             )}
           </div>
 
-          {tab !== 'sets' && <aside className="panel feed">
+          {tab !== 'sets' && tab !== 'month' && <aside className="panel feed">
             <div className="ph"><h2>Live feed</h2></div>
             {data.events.length ? data.events.map((e, i) => (
               <div className="ev" key={i} style={{ ['--c' as string]: `var(--${{ working: 'work', break: 'break', out: 'out', pool: 'pool', pick: 'picked', alert: 'alert', timer: 'work' }[e.kind] || 'muted'})` }}>

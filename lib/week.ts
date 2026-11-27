@@ -28,6 +28,39 @@ const safeRe = (src: string) => {
 };
 const avg = (xs: number[]) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null);
 
+/** Totals and averages over any run of days (a week here, a month in month.ts). Averages are per day clocked in. */
+export function totals(days: (WeekDay | null)[], useCu: boolean) {
+  const present = days.filter(Boolean) as WeekDay[];
+  const sum = (f: (d: WeekDay) => number) => present.reduce((t, d) => t + f(d), 0);
+  const totalWorked = sum((d) => d.worked);
+  const totalBreak = sum((d) => d.breaks);
+  const totalClickup = useCu ? sum((d) => d.clickup || 0) : null;
+  const merge = <T extends { minutes: number }>(items: T[], key: (x: T) => string) => {
+    const m = new Map<string, T>();
+    for (const x of items) {
+      const cur = m.get(key(x));
+      m.set(key(x), cur ? { ...cur, minutes: cur.minutes + x.minutes } : { ...x });
+    }
+    return [...m.values()].sort((a, b) => b.minutes - a.minutes);
+  };
+  return {
+    daysPresent: present.length,
+    avgIn: avg(present.map((d) => d.firstIn!).filter((x) => x !== null)),
+    avgOut: avg(present.map((d) => d.lastOut).filter((x): x is number => x !== null)),
+    totalWorked,
+    avgWorked: present.length ? Math.round(totalWorked / present.length) : 0,
+    daysOnTarget: present.filter((d) => d.worked >= CONFIG.workTargetMin).length,
+    totalBreak,
+    avgBreak: present.length ? Math.round(totalBreak / present.length) : 0,
+    daysOverBreak: present.filter((d) => d.breaks > CONFIG.breakAllowanceMin).length,
+    totalClickup,
+    avgClickup: totalClickup !== null && present.length ? Math.round(totalClickup / present.length) : null,
+    totalClickupOffClock: useCu ? sum((d) => d.clickupOffClock || 0) : null,
+    activities: merge(present.flatMap((d) => d.activities), (a) => `${a.activity || ''}\u0000${a.project || ''}`),
+    tasks: useCu ? merge(present.flatMap((d) => d.tasks), (t) => t.name).slice(0, 10) : [],
+  };
+}
+
 async function buildWeek(weekStart: string): Promise<WeekReport> {
   const e = engine();
   if (!e.updatedAt) await e.poll();
@@ -149,38 +182,12 @@ async function buildWeek(weekStart: string): Promise<WeekReport> {
       };
     });
 
-    const present = days.filter(Boolean) as WeekDay[];
-    const sum = (f: (d: WeekDay) => number) => present.reduce((t, d) => t + f(d), 0);
-    const totalWorked = sum((d) => d.worked);
-    const totalBreak = sum((d) => d.breaks);
-    const totalClickup = useCu ? sum((d) => d.clickup || 0) : null;
-    const merge = <T extends { minutes: number }>(items: T[], key: (x: T) => string) => {
-      const m = new Map<string, T>();
-      for (const x of items) {
-        const cur = m.get(key(x));
-        m.set(key(x), cur ? { ...cur, minutes: cur.minutes + x.minutes } : { ...x });
-      }
-      return [...m.values()].sort((a, b) => b.minutes - a.minutes);
-    };
     return {
       name: member.name,
       department: member.department,
       jibbleName: person!.name,
       days,
-      daysPresent: present.length,
-      avgIn: avg(present.map((d) => d.firstIn!).filter((x) => x !== null)),
-      avgOut: avg(present.map((d) => d.lastOut).filter((x): x is number => x !== null)),
-      totalWorked,
-      avgWorked: present.length ? Math.round(totalWorked / present.length) : 0,
-      daysOnTarget: present.filter((d) => d.worked >= CONFIG.workTargetMin).length,
-      totalBreak,
-      avgBreak: present.length ? Math.round(totalBreak / present.length) : 0,
-      daysOverBreak: present.filter((d) => d.breaks > CONFIG.breakAllowanceMin).length,
-      totalClickup,
-      avgClickup: totalClickup !== null && present.length ? Math.round(totalClickup / present.length) : null,
-      totalClickupOffClock: useCu ? sum((d) => d.clickupOffClock || 0) : null,
-      activities: merge(present.flatMap((d) => d.activities), (a) => `${a.activity || ''}\u0000${a.project || ''}`),
-      tasks: useCu ? merge(present.flatMap((d) => d.tasks), (t) => t.name).slice(0, 10) : [],
+      ...totals(days, useCu),
       cuSets: useCu ? setsOf(cu!.id) : null,
     };
   });
@@ -201,15 +208,15 @@ async function buildWeek(weekStart: string): Promise<WeekReport> {
 }
 
 // ───────────────────────── CSV for the weekly meeting ─────────────────────────
-const hmm = (m: number | null) => (m === null ? '' : `${Math.floor(m / 60)}:${String(Math.round(m % 60)).padStart(2, '0')}`);
+export const hmm = (m: number | null) => (m === null ? '' : `${Math.floor(m / 60)}:${String(Math.round(m % 60)).padStart(2, '0')}`);
 const cell = (v: string | number) => {
   const s = String(v);
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
-const topActivity = (a: { activity: string | null; project: string | null } | undefined) =>
+export const topActivity = (a: { activity: string | null; project: string | null } | undefined) =>
   a ? `${a.activity || 'No activity'}${a.project ? ` (${a.project})` : ''}` : '';
-const csv = (rows: (string | number)[][]) => '\ufeff' + rows.map((r) => r.map(cell).join(',')).join('\n') + '\n'; // BOM so Excel reads UTF-8
+export const csv = (rows: (string | number)[][]) => '\ufeff' + rows.map((r) => r.map(cell).join(',')).join('\n') + '\n'; // BOM so Excel reads UTF-8
 
 export function weekCsv(w: WeekReport) {
   const dayNames = w.dates.map((d) => new Date(d + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }));

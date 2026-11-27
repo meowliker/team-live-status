@@ -20,6 +20,8 @@ One link that shows your team live:
 - **Slack** (optional): when someone lands in *Needs attention* they get a Slack DM saying what's wrong and how to fix it; if it isn't fixed after 10 minutes they get a reminder and the managers in `team.config.ts` (`SLACK_MANAGERS`) are told; when it clears, "✅ Sorted" is posted in the same threads. When someone joins the pool, it's posted in `#creatives` with **@here** (set `SLACK_POOL_MENTION=channel` for @channel); if they're still free after 15 minutes, a reminder follows in the thread, then "✅ Assigned by …". Set it up: see *Slack setup* below.
 - Live feed, browser alerts, department filters, light and dark mode. Works on phones.
 
+**Monthly tab:** pick a month to see each person's hours, breaks, ClickUp time, sets and points, with a week-by-week breakdown, CSV download and print.
+
 ## Team list
 Edit `team.config.ts`. Names are matched to Jibble; a first name is enough if it is unique.
 Add `clickup: false` to someone who doesn't use ClickUp: they are tracked from Jibble only and show under "Working now" while clocked in.
